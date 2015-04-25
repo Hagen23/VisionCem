@@ -1,0 +1,1 @@
+g++ -o contrast *.cpp -I/usr/local/include/opencv/ -lopencv_core  -lopencv_highgui

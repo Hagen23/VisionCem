@@ -1,0 +1,1 @@
+g++ -o bin/morph morphology2.cpp -lopencv_imgproc -lopencv_highgui -lopencv_core -I/usr/local/include/opencv/ -I/usr/local/include/opencv2
