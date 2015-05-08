@@ -21,14 +21,29 @@ using namespace cv;
 using namespace gpu;
 using namespace std;
 
+int image_window = 0;
 int spatial_window = 6;
-int color_window = 11;
-int cluster_size = 1000;
+int color_window = 10;
+int cluster_size = 1900;
 
 Mat mSFilteringImgHost, mSSegRegionsImgHost, imgIntermedia, mSSegImgHost, outimgProc, outProcPts, 
 bin_mSFilteringImgHost, bin_mSSegImgHost, bin_mSSegRegionsImgHost, gris_mSSegRegionsImgHost, gris_mSFilteringImgHost, gris_mSSegImgHost;
 
+Mat img;
+
+vector<string> fileNames;
+
 gpu::GpuMat pimgGpu, interGPU, outImgProcGPU, destPoints,  imgGpu, mSFilteringImgGPU;
+
+void resizeCol(Mat& m, size_t sz, const Scalar& s)
+{
+    Mat tm(m.rows, m.cols + sz, m.type());
+	cout << "Matrix type " << m.type() << endl;
+    tm.setTo(s);
+    m.copyTo(tm(Rect(Point(0, 0), m.size())));
+    m = tm;
+}
+
 
 void ProccTimePrint( unsigned long Atime , string msg)   
 {   
@@ -42,7 +57,7 @@ void ProccTimePrint( unsigned long Atime , string msg)
 
 void createNames(vector<string> & input)
 {
-	for(int i = 1; i< 16; i++)
+	for(int i = 1; i<= 48; i++)
 		input.push_back(to_string(i)+".png");
 }
 
@@ -51,7 +66,7 @@ static void colorTesting(int, void*)
 	gpu::meanShiftSegmentation(imgGpu, mSSegRegionsImgHost, spatial_window,color_window, cluster_size);
 	imshow("regions", mSSegRegionsImgHost);
 	cvtColor( mSSegRegionsImgHost, mSSegRegionsImgHost, COLOR_RGB2GRAY );
-	threshold( mSSegRegionsImgHost, mSSegRegionsImgHost, 30, 255,  CV_THRESH_BINARY); 
+	threshold( mSSegRegionsImgHost, mSSegRegionsImgHost, 20, 255,  CV_THRESH_BINARY); 
 	imshow("bin regions", mSSegRegionsImgHost);
 }
 
@@ -65,44 +80,11 @@ static void clusterTesting(int, void*)
 	spatialTesting(0,0);
 }
 
-
-void resizeCol(Mat& m, size_t sz, const Scalar& s)
+static void imageSwitching(int, void*)
 {
-    Mat tm(m.rows, m.cols + sz, m.type());
-	cout << "Matrix type " << m.type() << endl;
-    tm.setTo(s);
-    m.copyTo(tm(Rect(Point(0, 0), m.size())));
-    m = tm;
-}
-
-int main(int argc, char** argv)
-{
-	unsigned long AAtime=0, AAtimeCpu = 0;
-	int element_shape = MORPH_ELLIPSE;	
-	Mat element = getStructuringElement(element_shape, Size(2*2+1, 2*2+1), Point(2, 2) );
-	vector<string> fileNames;
-	createNames(fileNames);
-
-	AAtimeCpu = getTickCount();
-
-	Mat img;
-
-	string defaultFile("3.png");
-
-	//defaultFile = fileNames[i];
-	//image load
-	if(argc > 1) 
-	{
-		img = imread( argv[1], 1 );
-		defaultFile = argv[1];
-
-		int n = 0;
-		while(n = defaultFile.find("/") != string::npos)
-			defaultFile = defaultFile.substr(n+1);
-	}
-	else
-		img = imread("../data/"+defaultFile);
-
+	img = imread("../data/"+fileNames.at(image_window));
+	cout << fileNames.at(image_window) << endl;
+	imshow("Original image", img);
 
 	fastNlMeansDenoising(img,img, 15);
 
@@ -111,43 +93,77 @@ int main(int argc, char** argv)
 
 	imshow("bin img", bin_mSFilteringImgHost);
 
-	unsigned int index = 0;
-	for(int j = 0;j < bin_mSFilteringImgHost.rows;j++)
-	{
-	    for(int i = 0;i < bin_mSFilteringImgHost.cols;i++)
-		{
-		   unsigned char b = bin_mSFilteringImgHost.at<unsigned char>(i,j);
-			if(b == 255)
-			{
-				cout << "Found " << i << " " << j << endl;
-				index = i;
-				break;
-			}
-	    }
-		if(index != 0)
-			break;
-	}
-
-	Mat leftRegion = img(Range::all(), Range(0,60));
+	Mat leftRegion = img(Range::all(), Range(0,70));
 	//resize(leftRegion, leftRegion, img.size());
-	resizeCol(leftRegion, img.cols - 60, Scalar(150,150,150));
+	resizeCol(leftRegion, img.cols - 70, Scalar(150,150,150));
 	
 	imshow("Segmented region", leftRegion);
-
-	namedWindow("Regions",1);
-	createTrackbar("Spatial", "Regions",&spatial_window,20,spatialTesting);
-	createTrackbar("Color", "Regions",&color_window,50,colorTesting);
-	createTrackbar("cluster", "Regions",&cluster_size,10000,clusterTesting);
-
-	//gpu version meanshift
-
-	//AAtime = getTickCount();
 
 	pimgGpu.upload(leftRegion);
 
 	//gpu meanshift only support 8uc4 type.
 	gpu::cvtColor(pimgGpu, imgGpu, CV_BGR2BGRA);
+
 	clusterTesting(0,0);
+}
+
+
+
+int main(int argc, char** argv)
+{
+	unsigned long AAtime=0, AAtimeCpu = 0;
+	int element_shape = MORPH_ELLIPSE;	
+	Mat element = getStructuringElement(element_shape, Size(2*2+1, 2*2+1), Point(2, 2) );
+
+	createNames(fileNames);
+
+	AAtimeCpu = getTickCount();
+
+	//string defaultFile("3.png");
+
+	//defaultFile = fileNames[i];
+	//image load
+//	if(argc > 1) 
+//	{
+//		img = imread( argv[1], 1 );
+//		defaultFile = argv[1];
+
+//		int n = 0;
+//		while(n = defaultFile.find("/") != string::npos)
+//			defaultFile = defaultFile.substr(n+1);
+//	}
+//	else
+//		img = imread("../data/"+defaultFile);
+
+//	unsigned int index = 0;
+//	for(int j = 0;j < bin_mSFilteringImgHost.rows;j++)
+//	{
+//	    for(int i = 0;i < bin_mSFilteringImgHost.cols;i++)
+//		{
+//		   unsigned char b = bin_mSFilteringImgHost.at<unsigned char>(i,j);
+//			if(b == 255)
+//			{
+//				cout << "Found " << i << " " << j << endl;
+//				index = i;
+//				break;
+//			}
+//	    }
+//		if(index != 0)
+//			break;
+//	}
+
+	namedWindow("Regions",1);
+	createTrackbar("Spatial", "Regions",&spatial_window,20,spatialTesting);
+	createTrackbar("Color", "Regions",&color_window,50,colorTesting);
+	createTrackbar("Cluster", "Regions",&cluster_size,10000,clusterTesting);
+	createTrackbar("Image", "Regions",&image_window,47,imageSwitching);
+
+	imageSwitching(0,0);
+	//gpu version meanshift
+
+	//AAtime = getTickCount();
+
+	
 	//gpu::blur(imgGpu, interGPU, Size(5,5), Point(-1,-1));
 
 	// BASE VALUES; these work for 15, 16, 24, and similar
