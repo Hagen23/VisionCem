@@ -25,6 +25,10 @@ int image_window = 0;
 int spatial_window = 6;
 int color_window = 10;
 int cluster_size = 1900;
+int binary_threshold = 93;
+
+int contrast_threshold = 22;
+int brightness_threshold = 48;
 
 Mat mSFilteringImgHost, mSSegRegionsImgHost, imgIntermedia, mSSegImgHost, outimgProc, outProcPts, 
 bin_mSFilteringImgHost, bin_mSSegImgHost, bin_mSSegRegionsImgHost, gris_mSSegRegionsImgHost, gris_mSFilteringImgHost, gris_mSSegImgHost;
@@ -35,10 +39,23 @@ vector<string> fileNames;
 
 gpu::GpuMat pimgGpu, interGPU, outImgProcGPU, destPoints,  imgGpu, mSFilteringImgGPU;
 
+//alpha = contract ; beta = brightness
+void adjustBrightnessContrast( Mat& m, float alpha, int beta)
+{
+	 /// Do the operation new_image(i,j) = alpha*image(i,j) + beta
+	for( int y = 0; y < m.rows; y++ )
+	{ 
+		for( int x = 0; x < m.cols; x++ )
+		{ 
+				m.at<uchar>(y,x) =
+				saturate_cast<uchar>( alpha*( m.at<uchar>(y,x) ) + beta );
+		}
+	}
+}
+
 void resizeCol(Mat& m, size_t sz, const Scalar& s)
 {
     Mat tm(m.rows, m.cols + sz, m.type());
-	cout << "Matrix type " << m.type() << endl;
     tm.setTo(s);
     m.copyTo(tm(Rect(Point(0, 0), m.size())));
     m = tm;
@@ -63,11 +80,12 @@ void createNames(vector<string> & input)
 
 static void colorTesting(int, void*)
 {	
-	gpu::meanShiftFiltering(imgGpu, imgGpu, spatial_window,color_window);
+	//gpu::meanShiftFiltering(imgGpu, imgGpu, spatial_window,color_window);
 	gpu::meanShiftSegmentation(imgGpu, mSSegRegionsImgHost, spatial_window,color_window, cluster_size);
+	
 	imshow("regions", mSSegRegionsImgHost);
 	cvtColor( mSSegRegionsImgHost, mSSegRegionsImgHost, COLOR_RGB2GRAY );
-	threshold( mSSegRegionsImgHost, mSSegRegionsImgHost, 20, 255,  CV_THRESH_BINARY); 
+	threshold( mSSegRegionsImgHost, mSSegRegionsImgHost, binary_threshold, 255,  CV_THRESH_BINARY); 
 	imshow("bin regions", mSSegRegionsImgHost);
 }
 
@@ -84,20 +102,19 @@ static void clusterTesting(int, void*)
 static void imageSwitching(int, void*)
 {
 	img = imread("../data/"+fileNames.at(image_window));
-	cout << fileNames.at(image_window) << endl;
 	imshow("Original image", img);
 
 	fastNlMeansDenoising(img,img, 15);
 
 	cvtColor( img, gris_mSFilteringImgHost, COLOR_RGB2GRAY );
-	threshold( gris_mSFilteringImgHost, bin_mSFilteringImgHost, 5, 255,  CV_THRESH_BINARY); 
+	threshold( gris_mSFilteringImgHost, bin_mSFilteringImgHost, binary_threshold, 255,  CV_THRESH_BINARY); 
 
 	imshow("bin img", bin_mSFilteringImgHost);
 
 	Mat leftRegion = img(Range::all(), Range(0,70));
 	//resize(leftRegion, leftRegion, img.size());
 	resizeCol(leftRegion, img.cols - 70, Scalar(150,150,150));
-	
+	adjustBrightnessContrast(leftRegion, contrast_threshold*0.1, brightness_threshold);
 	imshow("Segmented region", leftRegion);
 
 	pimgGpu.upload(leftRegion);
@@ -108,7 +125,20 @@ static void imageSwitching(int, void*)
 	clusterTesting(0,0);
 }
 
+static void binaryAdjustment(int, void*)
+{
+		imageSwitching(0,0);
+}
 
+static void brightnessAdjustment(int, void*)
+{
+	binaryAdjustment(0,0);
+}
+
+static void contrastAdjustment(int, void*)
+{
+	brightnessAdjustment(0,0);
+}
 
 int main(int argc, char** argv)
 {
@@ -158,8 +188,12 @@ int main(int argc, char** argv)
 	createTrackbar("Color", "Regions",&color_window,50,colorTesting);
 	createTrackbar("Cluster", "Regions",&cluster_size,10000,clusterTesting);
 	createTrackbar("Image", "Regions",&image_window,47,imageSwitching);
+	createTrackbar("Binary Threshold", "Regions",&binary_threshold,255,imageSwitching);
 
-	imageSwitching(0,0);
+	createTrackbar("Contrast", "Regions",&contrast_threshold,50,imageSwitching);
+	createTrackbar("Brightness", "Regions",&brightness_threshold,50,imageSwitching);
+
+	contrastAdjustment(0,0);
 	//gpu version meanshift
 
 	//AAtime = getTickCount();
