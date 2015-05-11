@@ -22,13 +22,13 @@ using namespace gpu;
 using namespace std;
 
 int image_window = 0;
-int spatial_window = 14;
-int color_window = 17;
-int cluster_size = 2600;
-int binary_threshold = 110;
+int spatial_window = 10;
+int color_window = 26;
+int cluster_size = 2700;
+int binary_threshold = 90;
 
-int contrast_threshold = 25;
-int brightness_threshold = 48;
+int contrast_threshold = 50;
+int brightness_threshold = 15;
 
 Mat mSFilteringImgHost, mSSegRegionsImgHost, imgIntermedia, mSSegImgHost, outimgProc, outProcPts, 
 bin_mSFilteringImgHost, bin_mSSegImgHost, bin_mSSegRegionsImgHost, gris_mSSegRegionsImgHost, gris_mSFilteringImgHost, gris_mSSegImgHost;
@@ -104,12 +104,12 @@ static void imageSwitching(int, void*)
 	img = imread("../data/"+fileNames.at(image_window));
 	imshow("Original image", img);
 
-	fastNlMeansDenoising(img,img, 15);
+	fastNlMeansDenoising(img,img, 20);
 
 	cvtColor( img, gris_mSFilteringImgHost, COLOR_RGB2GRAY );
-	threshold( gris_mSFilteringImgHost, bin_mSFilteringImgHost, binary_threshold, 255,  CV_THRESH_BINARY); 
+//	threshold( gris_mSFilteringImgHost, bin_mSFilteringImgHost, binary_threshold, 255,  CV_THRESH_BINARY); 
 
-	imshow("bin img", bin_mSFilteringImgHost);
+//	imshow("bin img", bin_mSFilteringImgHost);
 
 	Mat leftRegion = img(Range::all(), Range(0,65));
 	//resize(leftRegion, leftRegion, img.size());
