@@ -15,12 +15,14 @@ using namespace cv;
 using namespace gpu;
 using namespace std;
 
+#define regionSeparator	100
+
 int image_window = 0;
 
-int spatial_window_tissue = 10;
-int color_window_tissue = 26;
-int cluster_window_tissue = 249;
-int binary_threshold_tissue = 150;
+int spatial_window_tissue = 8;
+int color_window_tissue = 20;
+int cluster_window_tissue = 340;
+int binary_threshold_tissue = 120;
 
 int contrast_threshold_tissue = 50;
 int brightness_threshold_tissue = 50;
@@ -68,14 +70,13 @@ void adjustBrightnessContrastV3( Mat& m, float alpha, int beta)
 	}
 }
 
-void resizeCol(Mat& m, size_t sz, const Scalar& s)
+void resizeCol(Mat& m, size_t columns, size_t rows, const Scalar& s, Point startingPoint = Point(0,0))
 {
-    Mat tm(m.rows, m.cols + sz, m.type());
+    Mat tm(m.rows + rows, m.cols + columns, m.type());
     tm.setTo(s);
-    m.copyTo(tm(Rect(Point(0, 0), m.size())));
+    m.copyTo(tm(Rect(startingPoint, m.size())));
     m = tm;
 }
-
 
 void ProccTimePrint( unsigned long Atime , string msg)   
 {   
@@ -91,6 +92,18 @@ void createNames(vector<string> & input)
 {
 	for(int i = 1; i<= 48; i++)
 		input.push_back(to_string(i)+".png");
+}
+
+void morph(Mat& m)
+{
+	int element_shape = MORPH_ELLIPSE;
+	Mat element = getStructuringElement(element_shape, Size(2*2+1, 2*2+1), Point(2, 2) );
+//	morphologyEx(m, tissue_img, CV_MOP_OPEN, element);
+//	morphologyEx(m, tissue_img, CV_MOP_CLOSE, element);
+
+	element_shape = MORPH_RECT;
+	morphologyEx(m , m , CV_MOP_OPEN, element);
+	morphologyEx(m , m , CV_MOP_CLOSE, element);
 }
 
 static void binaryTissue(int, void*)
@@ -121,6 +134,12 @@ static void binaryTissue(int, void*)
  	cvtColor( mSSegImgHost, gris_mSSegImgHost, COLOR_RGB2GRAY );
  threshold( gris_mSSegImgHost, bin_mSSegImgHost,  binary_threshold_tissue, 255,  CV_THRESH_BINARY ); 
 	imshow("Bin segmentation", bin_mSSegImgHost);
+
+	Mat rightRegion = bin_mSFilteringImgHost(Range(10,bin_mSFilteringImgHost.rows -10) , Range(regionSeparator, bin_mSFilteringImgHost.cols));
+	resizeCol(rightRegion, regionSeparator, 20, Scalar(255,255,255), Point(regionSeparator,10));
+
+	morph(rightRegion);
+	imshow("Right Region", rightRegion);
 }
 
 static void imageSwitching(int, void*)
