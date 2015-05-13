@@ -1,0 +1,185 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <ctime>
+#include <string>
+#include <iostream>
+#include <omp.h>
+
+#include <cv.h>
+#include <highgui.h>
+#include <imgproc/imgproc.hpp>
+#include <gpu/gpu.hpp>
+#include <photo/photo.hpp>
+
+using namespace cv;
+using namespace gpu;
+using namespace std;
+
+#define regionSeparator	100
+
+int image_window = 0;
+
+int spatial_window_tissue = 8;
+int color_window_tissue = 20;
+int cluster_window_tissue = 340;
+int binary_threshold_tissue = 120;
+
+int contrast_threshold_tissue = 50;
+int brightness_threshold_tissue = 50;
+
+Mat mSFilteringImgHost, mSSegRegionsImgHost, imgIntermedia, mSSegImgHost, outimgProc, outProcPts, 
+bin_mSFilteringImgHost, bin_mSSegImgHost, bin_mSSegRegionsImgHost, gris_mSSegRegionsImgHost, gris_mSFilteringImgHost, gris_mSSegImgHost, leftRegion;
+
+Mat img;
+
+vector<string> fileNames;
+
+gpu::GpuMat pimgGpu, interGPU, outImgProcGPU, destPoints,  imgGpu, mSFilteringImgGPU;
+
+//alpha = contract ; beta = brightness
+void adjustBrightnessContrast( Mat& m, float alpha, int beta)
+{
+	uchar aux;
+	 /// Do the operation new_image(i,j) = alpha*image(i,j) + beta
+	for( int y = 0; y < m.rows; y++ )
+	{ 
+		for( int x = 0; x < m.cols; x++ )
+		{ 
+				aux = m.at<uchar>(y,x);
+				m.at<uchar>(y,x) =
+				saturate_cast<uchar>( alpha*aux + beta );
+		}
+	}
+}
+
+void adjustBrightnessContrastV3( Mat& m, float alpha, int beta)
+{
+	uchar aux;
+	 /// Do the operation new_image(i,j) = alpha*image(i,j) + beta
+	for( int y = 0; y < m.rows; y++ )
+	{ 
+		for( int x = 0; x < m.cols; x++ )
+		{ 
+			for(int i = 0; i< 3; i++)
+			{
+				aux = m.at<Vec3b>(y,x)[i];
+				m.at<Vec3b>(y,x)[i] =
+				saturate_cast<uchar>( alpha*aux + beta );
+			}
+		}
+	}
+}
+
+void resizeCol(Mat& m, size_t columns, size_t rows, const Scalar& s, Point startingPoint = Point(0,0))
+{
+    Mat tm(m.rows + rows, m.cols + columns, m.type());
+    tm.setTo(s);
+    m.copyTo(tm(Rect(startingPoint, m.size())));
+    m = tm;
+}
+
+void ProccTimePrint( unsigned long Atime , string msg)   
+{   
+	unsigned long Btime=0;   
+	float sec, fps;   
+	Btime = getTickCount();   
+	sec = (Btime - Atime)/getTickFrequency();   
+	fps = 1/sec;   
+	printf("%s %.4lf(sec) / %.4lf(fps) \n", msg.c_str(),  sec, fps );   
+} 
+
+void createNames(vector<string> & input)
+{
+	for(int i = 1; i<= 48; i++)
+		input.push_back(to_string(i)+".png");
+}
+
+void morph(Mat& m)
+{
+	int element_shape = MORPH_ELLIPSE;
+	Mat element = getStructuringElement(element_shape, Size(2*2+1, 2*2+1), Point(2, 2) );
+//	morphologyEx(m, tissue_img, CV_MOP_OPEN, element);
+//	morphologyEx(m, tissue_img, CV_MOP_CLOSE, element);
+
+	element_shape = MORPH_RECT;
+	morphologyEx(m , m , CV_MOP_OPEN, element);
+	morphologyEx(m , m , CV_MOP_CLOSE, element);
+}
+
+static void binaryTissue(int, void*)
+{
+	adjustBrightnessContrastV3(img, contrast_threshold_tissue*0.1, brightness_threshold_tissue);
+
+	imshow("Contrast image", img);
+
+	pimgGpu.upload(img);
+	//gpu meanshift only support 8uc4 type.
+	gpu::cvtColor(pimgGpu, imgGpu, CV_BGR2BGRA);
+
+	// For transductor
+	gpu::meanShiftFiltering(imgGpu, mSFilteringImgGPU, spatial_window_tissue, color_window_tissue);
+
+	// To get Tissue
+ 	gpu::meanShiftSegmentation(imgGpu, mSSegImgHost, spatial_window_tissue,color_window_tissue, cluster_window_tissue);
+
+	imshow("Segmentation image", mSSegImgHost);
+
+	mSFilteringImgGPU.download(mSFilteringImgHost);
+
+	imshow("Filtering image", mSFilteringImgHost);
+	cvtColor( mSFilteringImgHost, gris_mSFilteringImgHost, COLOR_RGB2GRAY );
+ threshold( gris_mSFilteringImgHost, bin_mSFilteringImgHost, binary_threshold_tissue, 255,  CV_THRESH_BINARY ); 
+	imshow("Bin Filtering", bin_mSFilteringImgHost);
+
+ 	cvtColor( mSSegImgHost, gris_mSSegImgHost, COLOR_RGB2GRAY );
+ threshold( gris_mSSegImgHost, bin_mSSegImgHost,  binary_threshold_tissue, 255,  CV_THRESH_BINARY ); 
+	imshow("Bin segmentation", bin_mSSegImgHost);
+
+	Mat rightRegion = bin_mSFilteringImgHost(Range(10,bin_mSFilteringImgHost.rows -10) , Range(regionSeparator, bin_mSFilteringImgHost.cols));
+	resizeCol(rightRegion, regionSeparator, 20, Scalar(255,255,255), Point(regionSeparator,10));
+
+	morph(rightRegion);
+	imshow("Right Region", rightRegion);
+}
+
+static void imageSwitching(int, void*)
+{
+	img = imread("../data/"+fileNames.at(image_window));
+	imshow("Original image", img);
+
+	fastNlMeansDenoising(img,img, 15);
+
+	binaryTissue(0,0);
+}
+
+int main(int argc, char** argv)
+{
+	unsigned long AAtime=0, AAtimeCpu = 0;
+	int element_shape = MORPH_ELLIPSE;	
+	Mat element = getStructuringElement(element_shape, Size(2*2+1, 2*2+1), Point(2, 2) );
+
+	createNames(fileNames);
+
+	AAtimeCpu = getTickCount();
+
+	namedWindow("Regions",1);
+
+	createTrackbar("Image", "Regions",&image_window ,47,imageSwitching);
+	createTrackbar("Binary tissue", "Regions",&binary_threshold_tissue ,255,imageSwitching);
+	createTrackbar("spatial tissue", "Regions",&spatial_window_tissue ,20,imageSwitching);
+	createTrackbar("Color tissue", "Regions",&color_window_tissue ,255,imageSwitching);
+	createTrackbar("Cluster tissue", "Regions",&cluster_window_tissue ,1500,imageSwitching);
+
+	createTrackbar("Contrast tissue", "Regions",&contrast_threshold_tissue,50,imageSwitching);
+	createTrackbar("Brightness tissue", "Regions",&brightness_threshold_tissue,50,imageSwitching);
+
+	imageSwitching(0,0);
+	
+	ProccTimePrint(AAtimeCpu , "cpu");
+	waitKey();
+
+	return 0;
+}
+
+
+

@@ -1,0 +1,54 @@
+#ifndef tissue
+#define tissue
+
+#include "misc_procedures.h"
+
+using namespace cv;
+using namespace gpu;
+using namespace std;
+
+Mat obtainTissue(Mat img, Mat leftRegion)
+{
+	int 	spatial_window = 10;
+	int 	color_window = 0;
+	int 	contrast_threshold = 14;
+	int 	brightness_threshold = 29;
+	int 	thresh = 45;
+	int		contourSizeLimit = 500;
+
+	Mat						img_local, img_gray, mSFilteringImgHost, threshold_output, tissue_mat, drawing;
+	gpu::GpuMat 	pimgGpu, imgGpu, mSFilteringImgGPU;
+
+	morph(leftRegion);
+	fastNlMeansDenoising(img,img_local,20);
+	adjustBrightnessContrastV3(img_local, contrast_threshold*0.1, brightness_threshold);
+
+	pimgGpu.upload(img_local);
+	gpu::cvtColor(pimgGpu, imgGpu, CV_BGR2BGRA);
+	gpu::meanShiftFiltering(imgGpu, mSFilteringImgGPU, spatial_window, color_window);
+	mSFilteringImgGPU.download(mSFilteringImgHost);
+
+  cvtColor( mSFilteringImgHost, img_gray, CV_BGR2GRAY );
+  
+  threshold( img_gray, threshold_output, thresh, 255, THRESH_BINARY_INV);
+
+	drawing = removeSmallBlobs(threshold_output, contourSizeLimit);
+
+	cvtColor( drawing, drawing, CV_BGR2GRAY );
+	threshold( drawing, drawing, thresh, 255, THRESH_BINARY );
+	
+	imshow("Drawing", drawing);
+	
+	tissue_mat = drawing + leftRegion;
+	morph(tissue_mat);
+	removeAllSmallerBlobs(tissue_mat, 300);
+
+//	cvtColor( tissue_mat, tissue_mat, CV_BGR2GRAY );
+//	threshold( tissue_mat, tissue_mat, thresh, 255, THRESH_BINARY );
+
+	return tissue_mat;
+}
+
+
+
+#endif
