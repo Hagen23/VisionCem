@@ -1,0 +1,12 @@
+#!/bin/bash
+ls allData | while read LINE
+do 
+	cd $LINE
+	pwd
+done
+#cat tempNames | while read LINE
+#do
+#  echo $LINE
+#done
+
+

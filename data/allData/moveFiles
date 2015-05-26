@@ -1,0 +1,31 @@
+#!/bin/bash
+
+#ls originals | while read LINE
+#do 
+#	STR=$LINE 
+#	NAME=${STR%_MRI.mat*}
+#	if [ ! -d "originals/$NAME" ]; then
+#		mkdir originals/$NAME
+#	fi
+#	if [ -d "originals/$NAME" ]; then
+#		mv originals/$LINE originals/$NAME/
+#	fi
+#done
+
+#ls originals | while read LINE
+#do
+#	for i in $(ls originals/$LINE)
+#	do
+#		NAME=${i%)*}
+#		NAME=${NAME#*(}
+#		mv originals/$LINE/$i originals/$LINE/$NAME
+#	done	
+#	echo
+#done
+
+#cat tempNames | while read LINE
+#do
+#  echo $LINE
+#done
+
+
