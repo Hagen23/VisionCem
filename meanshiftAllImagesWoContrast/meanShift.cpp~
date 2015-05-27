@@ -34,15 +34,25 @@ string defaultFile("24.png");
 
 vector<vector<string>> getCsvContent(string filename)
 {
-	ifstream file ( filename ); // declare file stream: http://www.cplusplus.com/reference/iostream/ifstream/
-	string value;
-	vector<vector<string> > cvsContents;
-	while ( file.good() )
+	ifstream file ( filename ,  ios::in); 
+	string value, value_aux;
+	vector<vector<string>> cvsContents;
+
+	while (!file.eof() )
 	{
 		vector<string> line;
-		while(getline ( file, value, ',' ))
-			line.push_back(value);
-		cvsContents.push_back(line);
+		size_t position0 = 0, position1 = 0;
+		getline(file, value);
+		while(position1 !=std::string::npos)
+		{
+			position1 = value.find(",", position1+1);
+			value_aux = value.substr(position0, position1-position0);
+			if(!value_aux.empty())
+				line.push_back(value_aux);
+			position0 = position1+1;
+		}
+		if (!line.empty())
+			cvsContents.push_back(line);
 	}
 	return cvsContents;
 }
@@ -145,10 +155,10 @@ void processImage(Mat img, string directory, string filename)
 	morphologyEx(transductor_img , transductor_img , CV_MOP_OPEN, element);
 	morphologyEx(transductor_img , transductor_img , CV_MOP_CLOSE, element);
 
-	imwrite("./data/allData/originals/"+directory+"/"+filename+"_imgFilter.png", img);
-	imwrite("./data/allData/originals/"+directory+"/"+filename+"_regions_bin.png", leftRegion);
-	imwrite("./data/allData/originals/"+directory+"/"+filename+"_tissue.png", tissue_img );
-	imwrite("./data/allData/originals/"+directory+"/"+filename+"_transductor.png", transductor_img);
+	imwrite("../data/allData/originals/"+directory+"/"+filename+"_imgFilter.png", img);
+	imwrite("../data/allData/originals/"+directory+"/"+filename+"_regions_bin.png", leftRegion);
+	imwrite("../data/allData/originals/"+directory+"/"+filename+"_tissue.png", tissue_img );
+	imwrite("../data/allData/originals/"+directory+"/"+filename+"_transductor.png", transductor_img);
 }
 
 int main(int argc, char** argv)
@@ -164,25 +174,23 @@ int main(int argc, char** argv)
 	cout << "STARTED" << endl;
 
 	int i = 0;
-	vector<vector<string> > cvsContents = getCsvContent("../data/allData/surveyFilesToProcess.csv");
-	for(auto v : cvsContents)
+	vector<vector<string>> cvsContents = getCsvContent("../data/allData/surveyFilesToProcess.csv");
+	vector<string> filenames;
+	
+	for(int i = 0; i < cvsContents.size(); i++)
 	{
-		string directory = v[0];
-		vector<string> filenames;
-		for(auto s : v)
-			filenames.push_back(s);
-		filenames.erase(filenames.begin());
-		for(auto s : filenames)
-			cout << s << " ";		
-		cout << endl;
-		filenames.clear();
-//		for(i = 0; i < filenames.size(); i++)
-//		{
-//			Mat img;
-//			cout << "../data/allData/originals/"+directory+"/"+filenames[i]+".png" << endl;
-//			img = imread("../data/allData/originals/"+directory+"/"+filenames[i]+".png"); 
-//			processImage(img, directory, filenames[i]);
-//		}
+		string directory = cvsContents[i][0];
+
+		for(int j = 1; j< cvsContents[i].size(); j++)
+			filenames.push_back(cvsContents[i][j]);
+
+		for(i = 0; i < 1filenames.size(); i++)
+		{
+			Mat img;
+			cout << "../data/allData/originals/"+directory+"/"+filenames[i]+".png" << endl;
+			img = imread("../data/allData/originals/"+directory+"/"+filenames[i]+".png"); 
+			processImage(img, directory, filenames[i]);
+		}
 	}
 	
 	cout << "FINISHED" << endl;
