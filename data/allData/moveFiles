@@ -23,6 +23,16 @@
 #	echo
 #done
 
+ls originals | while read LINE
+do
+	for i in $(ls originals/$LINE)
+	do
+		ext=".png"
+		mv originals/$LINE/$i originals/$LINE/$i$ext
+	done	
+	echo
+done
+
 #cat tempNames | while read LINE
 #do
 #  echo $LINE

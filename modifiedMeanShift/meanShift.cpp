@@ -9,7 +9,7 @@
 #include <ctime>
 #include <string>
 #include <iostream>
-#include <omp.h>
+#include <vector>
 
 #include <cv.h>
 #include <highgui.h>
@@ -36,6 +36,21 @@ string defaultFile("24.png");
 			bin_mSFilteringImgHost, bin_mSSegImgHost, bin_mSSegRegionsImgHost, gris_mSSegRegionsImgHost, gris_mSFilteringImgHost, gris_mSSegImgHost, leftRegion;
 
  gpu::GpuMat pimgGpu, interGPU, outImgProcGPU, destPoints,  imgGpu, mSFilteringImgGPU;
+
+vector<vector<string>> getCsvContent(string filename)
+{
+	ifstream file ( filename ); // declare file stream: http://www.cplusplus.com/reference/iostream/ifstream/
+	string value;
+	vector<vector<string> > cvsContents;
+	while ( file.good() )
+	{
+		vector<string> line;
+		while(getline ( file, value, ',' ))
+			line.push_back(value);
+		cvsContents.push_back(line);
+	}
+	return cvsContents;
+}
 
 //alpha = contrast ; beta = brightness
 void adjustBrightnessContrast( Mat& m, float alpha, int beta)
@@ -78,8 +93,8 @@ void obtainLeftRegion(Mat inImg, Mat &outImg)
 
 	cvtColor( inImg, greyImg, COLOR_RGB2GRAY );
 
-	leftRegionSeg = inImg(Range::all(), Range(0,65));
-	resizeCol(leftRegionSeg, inImg.cols - 65, Scalar(150,150,150));
+	leftRegionSeg = inImg(Range::all(), Range(0,70));
+	resizeCol(leftRegionSeg, inImg.cols - 70, Scalar(150,150,150));
 	adjustBrightnessContrast(leftRegionSeg, contrast_threshold*0.1, brightness_threshold);
 
 	imgGpuSeg.upload(leftRegionSeg);
@@ -111,6 +126,14 @@ int main(int argc, char** argv)
 	cout << "STARTED" << endl;
 
 	int i = 0;
+	vector<vector<string> > cvsContents = getCsvContent("../data/allData/surveyFilesToProcess.csv");
+	for(auto v : cvsContents)
+	{
+		string directory = v[0];
+		vector<string> filenames;
+		for( int i = 1; i< 5; i++)
+			filenames.push_back(v[i]);
+	}
 	//#pragma omp parallel for
 	for(i = 0; i < fileNames.size(); i++)
 {

@@ -12,13 +12,24 @@
 #	fi
 #done
 
+#ls originals | while read LINE
+#do
+#	for i in $(ls originals/$LINE)
+#	do
+#		NAME=${i%)*}
+#		NAME=${NAME#*(}
+#		mv originals/$LINE/$i originals/$LINE/$NAME
+#	done	
+#	echo
+#done
+
 ls originals | while read LINE
 do
 	for i in $(ls originals/$LINE)
 	do
-		NAME=${i%)*}
-		NAME=${NAME#*(}
-		mv originals/$LINE/$i originals/$LINE/$NAME
+		ext=".png"
+		echo $i$ext
+		#mv originals/$LINE/$i originals/$LINE/$i$ext
 	done	
 	echo
 done
