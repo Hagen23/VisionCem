@@ -17,10 +17,10 @@ using namespace gpu;
 using namespace std;
 
 int image_window = 0;
-int spatial_window = 10;
-int color_window = 26;
+int spatial_window = 0;
+int color_window = 0;
 int cluster_size = 2700;
-int binary_threshold = 90;
+int binary_threshold = 20;
 
 int contrast_threshold = 50;
 int brightness_threshold = 15;
@@ -89,18 +89,18 @@ void ProccTimePrint( unsigned long Atime , string msg)
  printf("%s %.4lf(sec) / %.4lf(fps) \n", msg.c_str(),  sec, fps );   
 } 
 
-void obtainLeftRegion(Mat inImg, Mat &outImg)
+void obtainLeftRegion(Mat inImg, Mat &outImg, string directory, string filename)
 {
 	Mat greyImg, leftRegionSeg, regionHost, regionHostColor;
 	gpu::GpuMat imgGpuSeg, imgGpuColor; 
 
 	fastNlMeansDenoising(inImg,inImg, 5);
-
+	//blur(inImg, inImg, Size(5,5), Point(-1,-1));
 	cvtColor( inImg, greyImg, COLOR_RGB2GRAY );
 
 	leftRegionSeg = inImg(Range::all(), Range(0,70));
 	resizeCol(leftRegionSeg, inImg.cols - 70, Scalar(150,150,150));
-	adjustBrightnessContrast(leftRegionSeg, contrast_threshold*0.1, brightness_threshold);
+	//adjustBrightnessContrast(leftRegionSeg, contrast_threshold*0.1, brightness_threshold);
 
 	imgGpuSeg.upload(leftRegionSeg);
 	gpu::cvtColor(imgGpuSeg, imgGpuColor, CV_BGR2BGRA);
@@ -108,7 +108,7 @@ void obtainLeftRegion(Mat inImg, Mat &outImg)
 	gpu::meanShiftSegmentation(imgGpuColor, regionHost, spatial_window,color_window, cluster_size);
 	
 	cvtColor( regionHost, regionHostColor, COLOR_RGB2GRAY );
-	imwrite( "../data/"+defaultFile+"_png_regions.png", regionHost );
+	imwrite( "../data/allData/processedMS/"+directory + "-" +filename+"_png_regions.png", regionHost );
 	threshold( regionHostColor, outImg, binary_threshold, 255,  CV_THRESH_BINARY); 
 }
 
@@ -120,25 +120,32 @@ void createNames(vector<string> & input)
 
 void processImage(Mat img, string directory, string filename)
 {
-	int element_shape = MORPH_ELLIPSE;	
-	Mat element = getStructuringElement(element_shape, Size(2*2+1, 2*2+1), Point(2, 2) );
-
-	fastNlMeansDenoising(img,img, 20);
-
-	pimgGpu.upload(img);
-
- 	//gpu meanshift only support 8uc4 type.
- 	gpu::cvtColor(pimgGpu, imgGpu, CV_BGR2BGRA);
-	gpu::meanShiftFiltering(imgGpu, mSFilteringImgGPU, 1, 30);
-
-	// To get Tissue
- 	gpu::meanShiftSegmentation(imgGpu, mSSegImgHost, 1,20, 300);
+	int element_shape =  MORPH_ELLIPSE;
+	int morphSize = 2;
+	Mat element = getStructuringElement(element_shape, Size(2*morphSize+1, 2*morphSize+1), Point(morphSize, morphSize) );
+	Mat test;
+	gpu::GpuMat testGPU;
 
 	//Segment the gel, air, and water
-	obtainLeftRegion(img, leftRegion);
+	obtainLeftRegion(img, leftRegion, directory, filename);
+
+	//fastNlMeansDenoising(img,img, 5);
+	pimgGpu.upload(img);
+
+	gpu::FastNonLocalMeansDenoising obj;
+	obj.simpleMethod(pimgGpu, pimgGpu, 10);
+ 	//gpu meanshift only support 8uc4 type.
+ 	gpu::cvtColor(pimgGpu, imgGpu, CV_BGR2BGRA);
+
+	//gpu::blur(testGPU, imgGpu, Size(5,5), Point(-1,-1));
+	gpu::meanShiftFiltering(imgGpu, mSFilteringImgGPU, 0, 0);
+
+	// To get Tissue
+ 	gpu::meanShiftSegmentation(imgGpu, mSSegImgHost, 0,0, 300);
 
 	mSFilteringImgGPU.download(mSFilteringImgHost);
-	
+	imgGpu.download(test);
+
 	cvtColor( mSFilteringImgHost, gris_mSFilteringImgHost, COLOR_RGB2GRAY );
 	threshold( gris_mSFilteringImgHost, bin_mSFilteringImgHost, 10, 255,  CV_THRESH_BINARY ); 
 
@@ -150,15 +157,19 @@ void processImage(Mat img, string directory, string filename)
 
 	morphologyEx(tissue_img, tissue_img, CV_MOP_OPEN, element);
 	morphologyEx(tissue_img, tissue_img, CV_MOP_CLOSE, element);
+	morphologyEx(tissue_img, tissue_img, CV_MOP_CLOSE, element);
 
-	element_shape = MORPH_RECT;
+	//removeAllSmallerBlobs(tissue_img, 200);
+	
+	//cout << "PASO BLOBS" << endl;
+  element_shape = MORPH_RECT;
 	morphologyEx(transductor_img , transductor_img , CV_MOP_OPEN, element);
 	morphologyEx(transductor_img , transductor_img , CV_MOP_CLOSE, element);
 
-	imwrite("../data/allData/originals/"+directory+"/"+filename+"_imgFilter.png", img);
-	imwrite("../data/allData/originals/"+directory+"/"+filename+"_regions_bin.png", leftRegion);
-	imwrite("../data/allData/originals/"+directory+"/"+filename+"_tissue.png", tissue_img );
-	imwrite("../data/allData/originals/"+directory+"/"+filename+"_transductor.png", transductor_img);
+	imwrite("../data/allData/processedMS/"+directory + "-" +filename+"_imgFilter.png", img);
+	imwrite("../data/allData/processedMS/"+directory + "-" +filename+"_regions_bin.png", leftRegion);
+	imwrite("../data/allData/processedMS/"+directory + "-" +filename+"_tissue.png", tissue_img );
+	imwrite("../data/allData/processedMS/"+directory + "-" +filename+"_transductor.png", transductor_img);
 }
 
 int main(int argc, char** argv)
@@ -176,20 +187,21 @@ int main(int argc, char** argv)
 	int i = 0;
 	vector<vector<string>> cvsContents = getCsvContent("../data/allData/surveyFilesToProcess.csv");
 	vector<string> filenames;
-	
+
 	for(int i = 0; i < cvsContents.size(); i++)
-	{
+	{		
+		filenames.clear();
 		string directory = cvsContents[i][0];
 
 		for(int j = 1; j< cvsContents[i].size(); j++)
-			filenames.push_back(cvsContents[i][j]);
+//			filenames.push_back(cvsContents[i][j]);
 
-		for(i = 0; i < 1filenames.size(); i++)
+//		for(i = 0; i < filenames.size(); i++)
 		{
 			Mat img;
-			cout << "../data/allData/originals/"+directory+"/"+filenames[i]+".png" << endl;
-			img = imread("../data/allData/originals/"+directory+"/"+filenames[i]+".png"); 
-			processImage(img, directory, filenames[i]);
+			cout << "../data/allData/originals/"+directory+"/"+cvsContents[i][j]+".png" << endl;
+			img = imread("../data/allData/originals/"+directory+"/"+cvsContents[i][j]+".png"); 
+			processImage(img, directory, cvsContents[i][j]);
 		}
 	}
 	

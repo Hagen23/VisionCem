@@ -28,6 +28,26 @@ string window_name = "Sobel Demo - Simple Edge Detector";
 static void image_callback(int, void*);
 static void sobel_callback(int, void*);
 
+void resizeCol(Mat& m, size_t columns, size_t rows, const Scalar& s, Point startingPoint = Point(0,0))
+{
+    Mat tm(m.rows + rows, m.cols + columns, m.type());
+    tm.setTo(s);
+    m.copyTo(tm(Rect(startingPoint, m.size())));
+    m = tm;
+}
+
+Mat obtainLeftRegion(Mat img)
+{
+	Mat img_local, leftRegion;
+	//blur(img, img_local, Size(5,5), Point(-1,-1));
+	//fastNlMeansDenoising(img,img_local, 20);
+
+	leftRegion = img(Range::all(), Range(0,70));
+	resizeCol(leftRegion, img.cols - 70, 0, Scalar(150,150,150));
+
+	return leftRegion;
+}
+
 void adjustBrightnessContrast( Mat& m, float alpha, int beta)
 {
 	uchar aux;
@@ -49,8 +69,9 @@ void adjustBrightnessContrast( Mat& m, float alpha, int beta)
 static void image_callback(int, void*)
 {
 	src = imread("../data/" + to_string(image + 1)+".png");
-	fastNlMeansDenoising(src,src, 5);
-	adjustBrightnessContrast(src, alpha*0.1, beta);
+	Mat leftRegion = obtainLeftRegion(src);
+	fastNlMeansDenoising(leftRegion,src, 50);
+	//adjustBrightnessContrast(src, alpha*0.1, beta);
 	pyrMeanShiftFiltering(src, src, spatial_window, color_window);
 	cvtColor( src, src_gray, CV_RGB2GRAY );
 	imshow("Original", src_gray);
@@ -80,7 +101,7 @@ static void sobel_callback(int, void*)
   /// Total Gradient (approximate)
   addWeighted( abs_grad_x, 1.5, abs_grad_y, 1.5, 0, grad );
 
-	//Canny( src_gray, grad, canny_thresh, canny_thresh*2, 3 );
+	Canny( src_gray, grad, canny_thresh, canny_thresh*2, 3 );
 	threshold( grad, grad, thresh, 255,  CV_THRESH_BINARY);
 	imshow( window_name, grad );
 
@@ -90,7 +111,7 @@ static void sobel_callback(int, void*)
   for( int i = 0; i< contours.size(); i++ )
      {
        	Scalar color = Scalar(255,255,255);
-				if(contours[i].size() >= contourSizeLimit)//contourArea(contours[i]) >= contourSizeLimit)
+				if(contourArea(contours[i]) >= contourSizeLimit)//contours[i].size() >= contourSizeLimit
 	       	drawContours( drawing, contours, i, color, CV_FILLED, 8 );
      }
 
@@ -113,7 +134,8 @@ int main( int argc, char** argv )
 	createTrackbar( "Color:", window_name, &color_window, 255, image_callback);
 	createTrackbar( "Contrast:", window_name, &alpha, 255, image_callback);
 	createTrackbar( "Brightness:", window_name, &beta, 255, image_callback);
-	createTrackbar( "Contour limit:", window_name, &contourSizeLimit, 100, image_callback);
+	createTrackbar( "Contour limit:", window_name, &contourSizeLimit, 500, image_callback);
+	createTrackbar( "Canny Threshold:", window_name, &canny_thresh, 100, image_callback);
 
 	image_callback(0,0);
 

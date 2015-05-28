@@ -17,8 +17,8 @@ Mat obtainRightRegion(Mat img)
 	Mat 					img_local, rightRegion, mSFilteringImgHost, gris_mSFilteringImgHost, bin_mSFilteringImgHost;
 	gpu::GpuMat 	pimgGpu, imgGpu, mSFilteringImgGPU;
 	
-	fastNlMeansDenoising(img,img_local, 15);
-	
+	//fastNlMeansDenoising(img,img_local, 15);
+	blur(img, img_local, Size(5,5), Point(-1,-1));
 	adjustBrightnessContrastV3(img_local, contrast_threshold_tissue*0.1, brightness_threshold_tissue);
 
 	pimgGpu.upload(img_local);

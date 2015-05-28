@@ -22,13 +22,15 @@ using namespace gpu;
 using namespace std;
 
 int image_window = 0;
-int spatial_window = 10;
-int color_window = 26;
+//int spatial_window = 10;
+int spatial_window = 0;
+int color_window = 0;
+//int color_window = 26;
 int cluster_size = 2700;
-int binary_threshold = 90;
+int binary_threshold = 20;
 
-int contrast_threshold = 50;
-int brightness_threshold = 15;
+int contrast_threshold = 0;
+int brightness_threshold = 0;
 
 Mat mSFilteringImgHost, mSSegRegionsImgHost, imgIntermedia, mSSegImgHost, outimgProc, outProcPts, 
 bin_mSFilteringImgHost, bin_mSSegImgHost, bin_mSSegRegionsImgHost, gris_mSSegRegionsImgHost, gris_mSFilteringImgHost, gris_mSSegImgHost;
@@ -102,19 +104,19 @@ static void clusterTesting(int, void*)
 static void imageSwitching(int, void*)
 {
 	img = imread("../data/"+fileNames.at(image_window));
-	imshow("Original image", img);
+	imshow("Regions", img);
 
-	fastNlMeansDenoising(img,img, 20);
+	fastNlMeansDenoising(img,img, 5);
 
 	cvtColor( img, gris_mSFilteringImgHost, COLOR_RGB2GRAY );
 //	threshold( gris_mSFilteringImgHost, bin_mSFilteringImgHost, binary_threshold, 255,  CV_THRESH_BINARY); 
 
 //	imshow("bin img", bin_mSFilteringImgHost);
 
-	Mat leftRegion = img(Range::all(), Range(0,65));
+	Mat leftRegion = img(Range::all(), Range(0,70));
 	//resize(leftRegion, leftRegion, img.size());
-	resizeCol(leftRegion, img.cols - 65, Scalar(150,150,150));
-	adjustBrightnessContrast(leftRegion, contrast_threshold*0.1, brightness_threshold);
+	resizeCol(leftRegion, img.cols - 70, Scalar(150,150,150));
+	//adjustBrightnessContrast(leftRegion, contrast_threshold*0.1, brightness_threshold);
 	imshow("Segmented region", leftRegion);
 
 	pimgGpu.upload(leftRegion);

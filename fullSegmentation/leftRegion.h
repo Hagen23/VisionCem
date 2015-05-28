@@ -15,6 +15,7 @@ Mat obtainLeftRegion(Mat img)
 	Mat 					img_local, leftRegion, gris_mSFilteringImgHost, mSSegRegionsImgHost;
 	gpu::GpuMat 	pimgGpu, imgGpu;
 
+	//blur(img, img_local, Size(5,5), Point(-1,-1));
 	fastNlMeansDenoising(img,img_local, 20);
 
 	cvtColor( img_local, gris_mSFilteringImgHost, COLOR_RGB2GRAY );
