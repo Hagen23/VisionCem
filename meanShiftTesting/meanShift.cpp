@@ -28,14 +28,15 @@ int color_window = 0;
 //int color_window = 26;
 int cluster_size = 2700;
 int binary_threshold = 20;
-int morphSize = 3;
+int morphSize = 5; //5 for 14-19; 7 for 33-36
 int contrast_threshold = 0;
 int brightness_threshold = 0;
+int blobFilter = 0;
 
 Mat mSFilteringImgHost, mSSegRegionsImgHost, imgIntermedia, mSSegImgHost, outimgProc, outProcPts, 
 bin_mSFilteringImgHost, bin_mSSegImgHost, bin_mSSegRegionsImgHost, gris_mSSegRegionsImgHost, gris_mSFilteringImgHost, gris_mSSegImgHost, ms_fil_left;
 
-Mat img;
+Mat img, transductor_img;
 
 vector<string> fileNames;
 
@@ -83,7 +84,7 @@ void createNames(vector<string> & input)
 void removeAllSmallerBlobs(Mat& m, float minArea)
 {
 	float maxBlobArea = 0.0;
-	int 	maxBlobIndex = 0;
+	int 	maxBlobIndex = -1;
 	
 	Mat m_in(m);
 
@@ -97,7 +98,7 @@ void removeAllSmallerBlobs(Mat& m, float minArea)
 	for( int i = 0; i < contours.size(); i++ )
 	{ 
 			float area = contourArea(contours[i]);
-			if(area > minArea)
+			if(area >= minArea)
 			{
 				if(area > maxBlobArea)
 				{
@@ -108,21 +109,29 @@ void removeAllSmallerBlobs(Mat& m, float minArea)
 			cout << "blob " << i << " area " << area << endl;
 	}
 	
-	endContours.push_back(contours[maxBlobIndex]);
-
-	vector<vector<Point> > contours_poly( endContours.size() );
-
-  for( int i = 0; i < endContours.size(); i++ )
-		approxPolyDP( Mat(endContours[i]), contours_poly[i], 0, true );
-
-  m = Mat::zeros( m.size(), CV_8UC3 );
-
-  for( int i = 0; i< endContours.size(); i++ )
+	if(maxBlobIndex >= 0)
 	{
-		Scalar color = Scalar( 255,255,255 );
-		drawContours( m, contours_poly, i, color, CV_FILLED, 8 );
+		cout << "Index " << maxBlobIndex << endl;
+
+		endContours.push_back(contours[maxBlobIndex]);
+
+		vector<vector<Point> > contours_poly( endContours.size() );
+
+		for( int i = 0; i < endContours.size(); i++ )
+			approxPolyDP( Mat(endContours[i]), contours_poly[i], 0, true );
+
+		m = Mat::zeros( m.size(), CV_8UC3 );
+
+		for( int i = 0; i< endContours.size(); i++ )
+		{
+			Scalar color = Scalar( 255,255,255 );
+			drawContours( m, contours_poly, i, color, CV_FILLED, 8 );
+		}
 	}
 }
+
+//Open abre lo negro
+//Close abre lo blanco
 
 static void colorTesting(int, void*)
 {	
@@ -150,14 +159,27 @@ static void colorTesting(int, void*)
 
 	Mat tissue = ms_fil_left - mSSegRegionsImgHost;
 	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
-	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
-
-	removeAllSmallerBlobs(tissue, 80);
-
-	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
 	morphologyEx(tissue, tissue, CV_MOP_OPEN, element);
 
+	removeAllSmallerBlobs(tissue, blobFilter);
+
+	pimgGpu.upload(img);
+	gpu::cvtColor(pimgGpu, imgGpu, CV_BGR2BGRA);
+	gpu::meanShiftFiltering(imgGpu, imgGpu, spatial_window,color_window);
+
+	imgGpu.download(transductor_img);
+	cvtColor( transductor_img, transductor_img, COLOR_RGB2GRAY );
+	threshold( transductor_img, transductor_img, binary_threshold, 255,  CV_THRESH_BINARY);
+
+	Mat transductor =  mSSegRegionsImgHost - transductor_img ;
+
+	element_shape = MORPH_RECT;
+	element = getStructuringElement(element_shape, Size(2*3+1, 2*3+1), Point(3,  3) );
+	morphologyEx(transductor, transductor, CV_MOP_CLOSE, element);
+	morphologyEx(transductor, transductor, CV_MOP_OPEN, element);
+	
 	imshow("Tissue", tissue);
+	imshow("Transductor", transductor);
 }
 
 static void spatialTesting(int, void*)
@@ -178,7 +200,7 @@ static void imageSwitching(int, void*)
 	//fastNlMeansDenoising(img,img, 5);
 	
 	//blur(img, img, Size(5,5), Point(0,0));
-	cvtColor( img, gris_mSFilteringImgHost, COLOR_RGB2GRAY );
+	//cvtColor( img, gris_mSFilteringImgHost, COLOR_RGB2GRAY );
 //	threshold( gris_mSFilteringImgHost, bin_mSFilteringImgHost, binary_threshold, 255,  CV_THRESH_BINARY); 
 
 //	imshow("bin img", bin_mSFilteringImgHost);
@@ -264,6 +286,7 @@ int main(int argc, char** argv)
 	createTrackbar("Morph size Threshold", "Regions",&morphSize,10,imageSwitching);
 	createTrackbar("Contrast", "Regions",&contrast_threshold,50,imageSwitching);
 	createTrackbar("Brightness", "Regions",&brightness_threshold,50,imageSwitching);
+	createTrackbar("Blobs", "Regions",&blobFilter,100,imageSwitching);
 
 	contrastAdjustment(0,0);
 	//gpu version meanshift
