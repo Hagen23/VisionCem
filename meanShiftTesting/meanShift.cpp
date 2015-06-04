@@ -21,19 +21,19 @@ using namespace cv;
 using namespace gpu;
 using namespace std;
 
-int image_window = 0;
+int image_window = 14;
 //int spatial_window = 10;
 int spatial_window = 0;
 int color_window = 0;
 //int color_window = 26;
 int cluster_size = 2700;
 int binary_threshold = 20;
-
+int morphSize = 3;
 int contrast_threshold = 0;
 int brightness_threshold = 0;
 
 Mat mSFilteringImgHost, mSSegRegionsImgHost, imgIntermedia, mSSegImgHost, outimgProc, outProcPts, 
-bin_mSFilteringImgHost, bin_mSSegImgHost, bin_mSSegRegionsImgHost, gris_mSSegRegionsImgHost, gris_mSFilteringImgHost, gris_mSSegImgHost;
+bin_mSFilteringImgHost, bin_mSSegImgHost, bin_mSSegRegionsImgHost, gris_mSSegRegionsImgHost, gris_mSFilteringImgHost, gris_mSSegImgHost, ms_fil_left;
 
 Mat img;
 
@@ -80,15 +80,84 @@ void createNames(vector<string> & input)
 		input.push_back(to_string(i)+".png");
 }
 
+void removeAllSmallerBlobs(Mat& m, float minArea)
+{
+	float maxBlobArea = 0.0;
+	int 	maxBlobIndex = 0;
+	
+	Mat m_in(m);
+
+	vector<vector<Point> > contours, endContours;
+  vector<Vec4i> hierarchy;
+
+	findContours( m, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+	
+	cout << "Found " << contours.size() << " blobs " << endl;
+
+	for( int i = 0; i < contours.size(); i++ )
+	{ 
+			float area = contourArea(contours[i]);
+			if(area > minArea)
+			{
+				if(area > maxBlobArea)
+				{
+					maxBlobArea = area;
+					maxBlobIndex = i;
+				}
+			}
+			cout << "blob " << i << " area " << area << endl;
+	}
+	
+	endContours.push_back(contours[maxBlobIndex]);
+
+	vector<vector<Point> > contours_poly( endContours.size() );
+
+  for( int i = 0; i < endContours.size(); i++ )
+		approxPolyDP( Mat(endContours[i]), contours_poly[i], 0, true );
+
+  m = Mat::zeros( m.size(), CV_8UC3 );
+
+  for( int i = 0; i< endContours.size(); i++ )
+	{
+		Scalar color = Scalar( 255,255,255 );
+		drawContours( m, contours_poly, i, color, CV_FILLED, 8 );
+	}
+}
+
 static void colorTesting(int, void*)
 {	
-	//gpu::meanShiftFiltering(imgGpu, imgGpu, spatial_window,color_window);
-	gpu::meanShiftSegmentation(imgGpu, mSSegRegionsImgHost, spatial_window,color_window, cluster_size);
+	int element_shape = MORPH_ELLIPSE;
+	Mat element = getStructuringElement(element_shape, Size(2*morphSize+1, 2*morphSize+1), Point(morphSize,  morphSize) );
 	
+	gpu::meanShiftFiltering(imgGpu, imgGpu, spatial_window,color_window);
+
+	gpu::meanShiftSegmentation(imgGpu, mSSegRegionsImgHost, spatial_window,color_window, cluster_size);
+
+	imgGpu.download(ms_fil_left);
+
+	cvtColor( ms_fil_left, ms_fil_left, COLOR_RGB2GRAY );
+	threshold( ms_fil_left, ms_fil_left, binary_threshold, 255,  CV_THRESH_BINARY);
+
+	imshow("ms filtering regions", ms_fil_left);
+	//adjustBrightnessContrast(mSSegRegionsImgHost, contrast_threshold*0.1, brightness_threshold);
+
 	imshow("regions", mSSegRegionsImgHost);
 	cvtColor( mSSegRegionsImgHost, mSSegRegionsImgHost, COLOR_RGB2GRAY );
-	threshold( mSSegRegionsImgHost, mSSegRegionsImgHost, binary_threshold, 255,  CV_THRESH_BINARY); 
+	threshold( mSSegRegionsImgHost, mSSegRegionsImgHost, binary_threshold, 255,  CV_THRESH_BINARY);
+	morphologyEx(mSSegRegionsImgHost, mSSegRegionsImgHost, CV_MOP_OPEN, element);
+	morphologyEx(mSSegRegionsImgHost, mSSegRegionsImgHost, CV_MOP_CLOSE, element);
 	imshow("bin regions", mSSegRegionsImgHost);
+
+	Mat tissue = ms_fil_left - mSSegRegionsImgHost;
+	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
+	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
+
+	removeAllSmallerBlobs(tissue, 80);
+
+	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
+	morphologyEx(tissue, tissue, CV_MOP_OPEN, element);
+
+	imshow("Tissue", tissue);
 }
 
 static void spatialTesting(int, void*)
@@ -106,8 +175,9 @@ static void imageSwitching(int, void*)
 	img = imread("../data/"+fileNames.at(image_window));
 	imshow("Regions", img);
 
-	fastNlMeansDenoising(img,img, 5);
-
+	//fastNlMeansDenoising(img,img, 5);
+	
+	//blur(img, img, Size(5,5), Point(0,0));
 	cvtColor( img, gris_mSFilteringImgHost, COLOR_RGB2GRAY );
 //	threshold( gris_mSFilteringImgHost, bin_mSFilteringImgHost, binary_threshold, 255,  CV_THRESH_BINARY); 
 
@@ -117,7 +187,7 @@ static void imageSwitching(int, void*)
 	//resize(leftRegion, leftRegion, img.size());
 	resizeCol(leftRegion, img.cols - 70, Scalar(150,150,150));
 	//adjustBrightnessContrast(leftRegion, contrast_threshold*0.1, brightness_threshold);
-	imshow("Segmented region", leftRegion);
+	//imshow("Segmented region", leftRegion);
 
 	pimgGpu.upload(leftRegion);
 
@@ -145,8 +215,8 @@ static void contrastAdjustment(int, void*)
 int main(int argc, char** argv)
 {
 	unsigned long AAtime=0, AAtimeCpu = 0;
-	int element_shape = MORPH_ELLIPSE;	
-	Mat element = getStructuringElement(element_shape, Size(2*2+1, 2*2+1), Point(2, 2) );
+//	int element_shape = MORPH_ELLIPSE;	
+//	Mat element = getStructuringElement(element_shape, Size(2*2+1, 2*2+1), Point(2, 2) );
 
 	createNames(fileNames);
 
@@ -190,8 +260,8 @@ int main(int argc, char** argv)
 	createTrackbar("Color", "Regions",&color_window,50,colorTesting);
 	createTrackbar("Cluster", "Regions",&cluster_size,5000,clusterTesting);
 	createTrackbar("Image", "Regions",&image_window,47,imageSwitching);
-	createTrackbar("Binary Threshold", "Regions",&binary_threshold,150,imageSwitching);
-
+	createTrackbar("Binary Threshold", "Regions",&binary_threshold,30,imageSwitching);
+	createTrackbar("Morph size Threshold", "Regions",&morphSize,10,imageSwitching);
 	createTrackbar("Contrast", "Regions",&contrast_threshold,50,imageSwitching);
 	createTrackbar("Brightness", "Regions",&brightness_threshold,50,imageSwitching);
 
