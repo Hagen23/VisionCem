@@ -1,5 +1,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+#include <photo/photo.hpp>
+
 #include "utilityFunctions.h"
 
 #include <iostream>
@@ -13,11 +15,12 @@ using namespace std;
 
 Mat src; Mat src_gray;
 
-int thresh = 35;
-int image_window = 14;
+int thresh = 10;
+int image_window = 16;
 int max_thresh = 255;
+int small_thresh = 10;
 vector<string> fileNames;
-char* source_window;
+string source_window;
 
 RNG rng(12345);
 
@@ -50,6 +53,7 @@ int main( int argc, char** argv )
 
   createTrackbar( " Threshold:", "Source", &thresh, max_thresh, thresh_callback );
 	createTrackbar("Image", "Source",&image_window,47,image_callback);
+	createTrackbar("Blobs", "Source",&small_thresh,400,thresh_callback);
 	image_callback(0,0);
 
   waitKey(0);
@@ -61,7 +65,7 @@ void image_callback(int, void*)
 	src = imread("../data/"+fileNames.at(image_window));
 	/// Convert image to gray and blur it
   cvtColor( src, src_gray, CV_BGR2GRAY );
-  blur( src_gray, src_gray, Size(3,3) );
+  blur( src_gray, src_gray, Size(5,5) );
 
 	src_gray = src_gray(Range::all(), Range(0,70));
 
@@ -81,9 +85,30 @@ void thresh_callback(int, void* )
   /// Detect edges using Threshold
   threshold( src_gray, threshold_output, thresh, 255, THRESH_BINARY );
 	imshow("Threshold", threshold_output);
+		
 	matrixData rectData = maxRectInMat(threshold_output);
+	
+	Mat tissue = threshold_output(Range::all(), Range(0,rectData.col - rectData.width));
+	resizeCol(tissue, threshold_output.cols - (rectData.col - rectData.width), Scalar(0,0,0));
+	
+  Mat gel = threshold_output - tissue;
+  
+  imshow("Gel", gel);
+  
+	int element_shape = MORPH_ELLIPSE;
+	Mat element = getStructuringElement(element_shape, Size(2*2+1, 2*2+1), Point(3, 3) );
+	morphologyEx(tissue, tissue, CV_MOP_OPEN, element);
+	morphologyEx(tissue, tissue, CV_MOP_OPEN, element);
+	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
+	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
+	
+	tissue = removeSmallBlobs(tissue, small_thresh);
+	imshow("Tissue", tissue);
+	
 	Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
-	Mat drawing = Mat::zeros( threshold_output.size(), CV_8UC3 );
+	
+	Mat drawing(src_gray); // = Mat::zeros( threshold_output.size(), CV_8UC3 );
+	cvtColor( drawing, drawing, CV_GRAY2BGR );
 
 	line( drawing, Point(rectData.col, rectData.row), Point(rectData.col -  rectData.width, rectData.row), color, 1, 8 );
 	line( drawing, Point(rectData.col -  rectData.width, rectData.row), Point(rectData.col -  rectData.width, rectData.row - rectData.height), color, 1, 8 );
@@ -92,35 +117,4 @@ void thresh_callback(int, void* )
 				
 	namedWindow( "Contours", CV_WINDOW_AUTOSIZE );
   imshow( "Contours", drawing );
-  /// Find contours
-//  findContours( threshold_output, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE, Point(0, 0) );
-
-//  /// Find the rotated rectangles and ellipses for each contour
-//  vector<RotatedRect> minRect( contours.size() );
-//  vector<RotatedRect> minEllipse( contours.size() );
-
-//  for( int i = 0; i < contours.size(); i++ )
-//     { minRect[i] = minAreaRect( Mat(contours[i]) );
-//       if( contours[i].size() > 5 )
-//         { minEllipse[i] = fitEllipse( Mat(contours[i]) ); }
-//     }
-
-//  /// Draw contours + rotated rects + ellipses
-//  Mat drawing = Mat::zeros( threshold_output.size(), CV_8UC3 );
-//  for( int i = 0; i< contours.size(); i++ )
-//     {
-//       Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
-//       // contour
-//       drawContours( drawing, contours, i, color, 1, 8, vector<Vec4i>(), 0, Point() );
-//       // ellipse
-//      // ellipse( drawing, minEllipse[i], color, 2, 8 );
-//       // rotated rectangle
-//       Point2f rect_points[4]; minRect[i].points( rect_points );
-//       for( int j = 0; j < 4; j++ )
-//          line( drawing, rect_points[j], rect_points[(j+1)%4], color, 1, 8 );
-//     }
-
-//  /// Show in a window
-//  namedWindow( "Contours", CV_WINDOW_AUTOSIZE );
-//  imshow( "Contours", drawing );
 }

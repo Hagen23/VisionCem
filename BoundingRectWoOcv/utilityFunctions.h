@@ -36,6 +36,89 @@ struct matrixData
 	}
 };
 
+Mat removeSmallBlobs(Mat m, float maxBlobArea)
+{
+	Mat drawing;
+
+	vector<vector<Point> > contours, endContours;
+  vector<Vec4i> hierarchy;
+
+	findContours( m, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+	
+	for( int i = 0; i < contours.size(); i++ )
+	{ 
+			double area = contourArea(contours[i]);
+			if(area > maxBlobArea)
+				endContours.push_back(contours[i]);
+	}
+
+  vector<vector<Point> > contours_poly( endContours.size() );
+
+  for( int i = 0; i < endContours.size(); i++ )
+		approxPolyDP( Mat(endContours[i]), contours_poly[i], 0, true );
+
+  drawing = Mat::zeros( m.size(), CV_8UC3 );
+
+  for( int i = 0; i< endContours.size(); i++ )
+	{
+		Scalar color = Scalar( 255,255,255 );
+		drawContours( drawing, contours_poly, i, color, CV_FILLED, 8 );
+	}
+
+	return drawing;
+}
+
+void removeAllSmallerBlobs(Mat& m, float minArea)
+{
+	float maxBlobArea = 0.0, secondMaxArea = 0.0;
+	int 	maxBlobIndex = 0, secondIndex = 0;
+	
+	Mat m_in(m);
+
+	vector<vector<Point> > contours, endContours;
+  vector<Vec4i> hierarchy;
+
+	findContours( m, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
+	
+	cout << "Found " << contours.size() << " blobs " << endl;
+
+	for( int i = 0; i < contours.size(); i++ )
+	{ 
+			float area = contourArea(contours[i]);
+			if(area > minArea)
+			{
+				if(area > maxBlobArea)
+				{
+					maxBlobArea = area;
+					maxBlobIndex = i;
+				}
+				else
+					if(area > secondMaxArea)
+					{	
+						secondMaxArea = area;
+						secondIndex = i;	
+					}
+			}
+			cout << "blob " << i << " area " << area << endl;
+	}
+	
+	cout << "secondIndex " << secondIndex << " secondMaxArea " << secondMaxArea << endl;
+	endContours.push_back(contours[secondIndex]);
+
+	vector<vector<Point> > contours_poly( endContours.size() );
+
+  for( int i = 0; i < endContours.size(); i++ )
+		approxPolyDP( Mat(endContours[i]), contours_poly[i], 0, true );
+
+  m = Mat::zeros( m.size(), CV_8UC3 );
+
+  for( int i = 0; i< endContours.size(); i++ )
+	{
+		Scalar color = Scalar( 255,255,255 );
+		drawContours( m, contours_poly, i, color, CV_FILLED, 8 );
+	}
+}
+
 matrixData largestArea(unsigned char *arr, int index, int colSize)  
 {  
 	int *area = new int[colSize]; //initialize it to 0  
@@ -114,12 +197,18 @@ void trasposeMatrix(unsigned char *A, unsigned char *result, int rowSize, int co
 	}
 }
 
-matrixData find_max_matrix(unsigned char *A, unsigned char *B, int rowSize, int colSize)  
+matrixData find_max_matrix(unsigned char *input, unsigned char *input_trasposed, int rowSize, int colSize)  
 {  
  matrixData finalData, dataRow, dataCol;
  int maxRow, maxCol, cur_maxRow, cur_maxCol;  
  cur_maxRow = 0, cur_maxCol = 0;  
-  
+ unsigned char *A, *B;
+ 
+ A = new unsigned char[rowSize * colSize];
+ B = new unsigned char[rowSize * colSize];
+ 
+ memcpy ( A, input, rowSize*colSize );
+ memcpy ( B, input_trasposed, rowSize*colSize );
  //Calculate Auxilary matrix histograms 
  for (int i=1; i<rowSize; i++)  
      for(int j=0; j<colSize; j++)  
