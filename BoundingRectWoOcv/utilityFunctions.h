@@ -6,6 +6,8 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <stack>
 #include <iostream>
+#include <vector>
+#include <fstream>
 
 using namespace cv;
 using namespace std;
@@ -35,6 +37,71 @@ struct matrixData
 		printf("Area %d row %d col %d width %d, height %d \n\n",area, row, col, width, height);
 	}
 };
+
+void createNames(vector<string> & input)
+{
+	for(int i = 1; i<= 48; i++)
+		input.push_back(to_string(i)+".png");
+}
+
+void obtainRegionInMat(Mat& m, int beginCol, int endCol, const Scalar s)
+{
+	Mat mask = cvCreateMat(m.rows, m.cols, m.type());
+	mask.setTo(Scalar(0,0,0));
+	
+	for(int i=beginCol; i<endCol; i++)
+		 for(int j=0; j<mask.rows; j++)
+		     mask.at<uchar>(Point(i,j)) = 255;
+	
+	Mat temporaryImg(m.rows, m.cols, m.type()); 
+	temporaryImg.setTo(s);
+	m.copyTo(temporaryImg,mask);
+
+	m = temporaryImg;
+}
+
+void resizeCol(Mat& m, size_t sz, const Scalar& s)
+{
+    Mat tm(m.rows, m.cols + sz, m.type());
+    tm.setTo(s);
+    m.copyTo(tm(Rect(Point(0, 0), m.size())));
+    m = tm;
+}
+
+void ProccTimePrint( unsigned long Atime , string msg)   
+{   
+ unsigned long Btime=0;   
+ float sec, fps;   
+ Btime = getTickCount();   
+ sec = (Btime - Atime)/getTickFrequency();   
+ fps = 1/sec;   
+ printf("%s %.4lf(sec) / %.4lf(fps) \n", msg.c_str(),  sec, fps );   
+} 
+
+vector<vector<string>> getCsvContent(string filename)
+{
+	ifstream file ( filename ,  ios::in); 
+	string value, value_aux;
+	vector<vector<string>> cvsContents;
+
+	while (!file.eof() )
+	{
+		vector<string> line;
+		size_t position0 = 0, position1 = 0;
+		getline(file, value);
+		while(position1 !=std::string::npos)
+		{
+			position1 = value.find(",", position1+1);
+			value_aux = value.substr(position0, position1-position0);
+			if(!value_aux.empty())
+				line.push_back(value_aux);
+			position0 = position1+1;
+		}
+		if (!line.empty())
+			cvsContents.push_back(line);
+	}
+	return cvsContents;
+}
 
 Mat removeSmallBlobs(Mat m, float maxBlobArea)
 {
@@ -257,34 +324,11 @@ matrixData maxRectInMat(Mat& Image)
 		
 		image_data = Image.ptr();
 		
-//		for(int i =0; i< nRows; i++)
-//		{
-//			for(int j =0; j< nCols; j++)
-//				cout << image_data[i*nRows+j] << " ";
-//			cout << endl;
-//		}
 		if(Image.isContinuous())
 		{
 			trasposeMatrix(image_data, image_data_trasposed, nRows, nCols);
 			return find_max_matrix(image_data, image_data_trasposed, nRows, nCols);
 		}
 		return matrixData();
-//    if (I.isContinuous())
-//    {
-//        nCols *= nRows;
-//        nRows = 1;
-//    }
-
-//    int i,j;
-//    uchar* p;
-//    for( i = 0; i < nRows; ++i)
-//    {
-//        p = I.ptr(i);
-//        for ( j = 0; j < nCols; ++j)
-//        {
-//            p[j] = table[p[j]];
-//        }
-//    }
-    //return I;
 }
 #endif
