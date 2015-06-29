@@ -103,12 +103,12 @@ vector<vector<string>> getCsvContent(string filename)
 	return cvsContents;
 }
 
-Mat removeSmallBlobs(Mat m, float maxBlobArea)
+Mat removeSmallBlobs(Mat m, float maxBlobArea, Scalar s = Scalar(255, 255, 255))
 {
 	Mat drawing;
 
 	vector<vector<Point> > contours, endContours;
-  vector<Vec4i> hierarchy;
+	vector<Vec4i> hierarchy;
 
 	findContours( m, contours, hierarchy, CV_RETR_TREE, CV_CHAIN_APPROX_SIMPLE);
 	
@@ -124,11 +124,11 @@ Mat removeSmallBlobs(Mat m, float maxBlobArea)
   for( int i = 0; i < endContours.size(); i++ )
 		approxPolyDP( Mat(endContours[i]), contours_poly[i], 0, true );
 
-  drawing = Mat::zeros( m.size(), CV_8UC3 );
+  drawing = Mat::zeros( m.size(), m.type() );
 
   for( int i = 0; i< endContours.size(); i++ )
 	{
-		Scalar color = Scalar( 255,255,255 );
+		Scalar color = s;
 		drawContours( drawing, contours_poly, i, color, CV_FILLED, 8 );
 	}
 
@@ -139,7 +139,7 @@ void removeAllSmallerBlobs(Mat& m, float minArea)
 {
 	float maxBlobArea = 0.0, secondMaxArea = 0.0;
 	int 	maxBlobIndex = 0, secondIndex = 0;
-	
+			
 	Mat m_in(m);
 
 	vector<vector<Point> > contours, endContours;
