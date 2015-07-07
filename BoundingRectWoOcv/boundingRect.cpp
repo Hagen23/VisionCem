@@ -15,11 +15,13 @@ using namespace std;
 
 Mat src, src_gray, transductor;
 
-int thresh = 15;
-int image_window = 16;
-int max_thresh = 50;
+int thresh = 18;
+int image_window = 36;
+int max_thresh = 25;
 int tissue_thresh = 650;
 int transductor_thresh = 1000;
+int blur_v = 5;
+int mode_g = 0;
 vector<string> fileNames;
 string source_window;
 unsigned long AAtime=0, AAtimeCpu = 0;
@@ -32,12 +34,25 @@ void image_callback(int, void* );
 void singleImage(void);
 void allImages(void);
 void processImage(Mat img, string directory, string filename);
+void processImage(Mat img, string directory, string filename, int mode);
 
 /** @function main */
 int main( int argc, char** argv )
 {
+	if(argc > 1)
+	{
+		if(argv[1] == std::string("1"))
+		{
+			mode_g = 1;
+			allImages();
+			return 0;
+		}
+	}
+
+	mode_g = 0;
 	singleImage();
-  return(0);
+		
+  	return(0);
 }
 
 void allImages(void)
@@ -59,9 +74,9 @@ void allImages(void)
 		for(int j = 1; j< cvsContents[i].size(); j++)
 		{
 			Mat img;
-			cout << "../data/allData/originals/"+directory+"/"+cvsContents[i][j]+".png" << endl;
+			//cout << "../data/allData/originals/"+directory+"/"+cvsContents[i][j]+".png" << endl;
 			img = imread("../data/allData/originals/"+directory+"/"+cvsContents[i][j]+".png"); 
-			processImage(img, directory, cvsContents[i][j]);
+			processImage(img, directory, cvsContents[i][j], mode_g);
 		}
 	}
 	
@@ -70,64 +85,113 @@ void allImages(void)
 	
 }
 
-void processImage(Mat src, string directory, string filename)
+void processImage(Mat src, string directory, string filename, int mode)
 {
-	Mat threshold_output, src_gray;
-	int element_shape = MORPH_ELLIPSE;
-	Mat element = getStructuringElement(element_shape, Size(2*2+1, 2*2+1), Point(3, 3) );
-
 	cvtColor( src, src_gray, CV_BGR2GRAY );
-	blur( src_gray, src_gray, Size(5,5) );
+	blur( src_gray, src_gray, Size(blur_v,blur_v) );
+
+	src_gray.copyTo(transductor);
 
 	src_gray = src_gray(Range::all(), Range(0,70));
 
 	resizeCol(src_gray, src.cols - 70, Scalar(0,0,0));
-	
-	threshold( src_gray, threshold_output, thresh, 255, THRESH_BINARY );
-	threshold( src_gray, threshold_output, thresh, 255, THRESH_BINARY );
-		
+
+	Mat threshold_output, threshold_output_transductor;
+	vector<vector<Point> > contours;
+	vector<Vec4i> hierarchy;
+	int element_shape = MORPH_RECT;
+	int morphSize = 5;
+	Mat element = getStructuringElement(element_shape, Size(2*morphSize+1, 2*morphSize+1), Point(morphSize, morphSize) );
+
+	if(image_window > 23)
+		threshold( src_gray, threshold_output, (thresh - 10) > 0?(thresh-10):0, 255, THRESH_BINARY );
+	else
+		threshold( src_gray, threshold_output, thresh, 255, THRESH_BINARY );
+
+	if(image_window > 23)
+		threshold( transductor, threshold_output_transductor, (thresh - 10) > 0?(thresh-10):0, 255, THRESH_BINARY_INV );
+	else
+		threshold(transductor, threshold_output_transductor, thresh, 255, THRESH_BINARY_INV);
+
+	if(image_window > 23)
+		obtainRegionInMat(threshold_output_transductor, 98,threshold_output_transductor.cols, Scalar(0,0,0));
+	else
+		obtainRegionInMat(threshold_output_transductor, 90,threshold_output_transductor.cols, Scalar(0,0,0));
+
+	morphologyEx(threshold_output_transductor, threshold_output_transductor, CV_MOP_CLOSE, element);
+	morphologyEx(threshold_output_transductor, threshold_output_transductor, CV_MOP_CLOSE, element);
+
+	threshold_output_transductor = removeSmallBlobs(threshold_output_transductor, transductor_thresh);
+
 	matrixData rectData = maxRectInMat(threshold_output);
+	rectData.printData();
+	rectangle(src, Point(rectData.col, rectData.row),Point(rectData.col-rectData.width,rectData.row-rectData.height), Scalar(255,0,0), 2);
 	
+	Mat aux(threshold_output);
+	obtainRegionInMat(aux, rectData.col - rectData.width-5, rectData.col+5, rectData.row - rectData.height-10, rectData.row+10, Scalar(0,0,0));
+
 	Mat tissue = threshold_output(Range::all(), Range(0,rectData.col - rectData.width));
 	resizeCol(tissue, threshold_output.cols - (rectData.col - rectData.width), Scalar(0,0,0));
-	
-  	Mat gel = threshold_output - tissue;
-    
+
+	Mat gel = threshold_output - tissue;
+	Mat transductor_final = threshold_output + threshold_output_transductor;
+
+	gel = removeSmallBlobs(gel, tissue_thresh);
+
+	element_shape = MORPH_ELLIPSE;
+	morphSize = 2;
+	element = getStructuringElement(element_shape, Size(2*morphSize+1, 2*morphSize+1), Point(morphSize, morphSize) );
+
 	morphologyEx(tissue, tissue, CV_MOP_OPEN, element);
 	morphologyEx(tissue, tissue, CV_MOP_OPEN, element);
 	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
 	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
-	
+	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
+	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
+
 	tissue = removeSmallBlobs(tissue, tissue_thresh);
 	
-	imwrite("../data/allData/processed/"+directory + "-" +filename+"_original.png", src);
-	imwrite("../data/allData/processed/"+directory + "-" +filename+"_tissue.png", tissue );
-	imwrite("../data/allData/processed/"+directory + "-" +filename+"_gel.png", gel);
-	imwrite("../data/allData/processed/"+directory + "-" +filename+"_transductor.png", transductor);
+	if(mode == 0)
+	{
+	//	imshow("Threshold", threshold_output);
+		imshow( source_window, src );
+		imshow("Transductor", threshold_output_transductor);
+		imshow("Tissue", tissue);
+		imshow("Gel", gel);
+		imshow("AUX", aux);
+	}
+	if(mode == 1)
+	{
+		imwrite("../data/allData/processed/"+directory + "-" +filename+"_1_original.png", src);
+		imwrite("../data/allData/processed/"+directory + "-" +filename+"_2_tissue.png", tissue );
+		imwrite("../data/allData/processed/"+directory + "-" +filename+"_3_gel.png", gel);
+		imwrite("../data/allData/processed/"+directory + "-" +filename+"_4_transductor.png", threshold_output_transductor);
+	}
 }
 
 void singleImage(void)
 {
 	createNames(fileNames);
 
-  source_window = "Source";
-  namedWindow( source_window, CV_WINDOW_AUTOSIZE );
+	source_window = "Source";
+	namedWindow( source_window, CV_WINDOW_AUTOSIZE );
 
-  createTrackbar( " Threshold:", "Source", &thresh, max_thresh, thresh_callback );
+	createTrackbar( "Threshold", "Source", &thresh, max_thresh, thresh_callback );
 	createTrackbar("Image", "Source",&image_window,47,image_callback);
 	createTrackbar("Blobs Tissue", "Source",&tissue_thresh,1000,thresh_callback);
 	createTrackbar("Blobs Transductor", "Source",&transductor_thresh,1000,thresh_callback);
 	image_callback(0,0);
 
-  waitKey(0);
+	waitKey(0);
 }
 
 void image_callback(int, void*)
 {
-	src = imread("../data/"+fileNames.at(image_window));
+	string src_file = "../data/TestData/"+fileNames.at(image_window);
+	src = imread(src_file);
 
 	cvtColor( src, src_gray, CV_BGR2GRAY );
-	blur( src_gray, src_gray, Size(5,5) );
+	blur( src_gray, src_gray, Size(blur_v,blur_v) );
 
 	src_gray.copyTo(transductor);
 
@@ -142,62 +206,5 @@ void image_callback(int, void*)
 /** @function thresh_callback */
 void thresh_callback(int, void* )
 {
-	Mat threshold_output, threshold_output_transductor;
-	vector<vector<Point> > contours;
-	vector<Vec4i> hierarchy;
-	int element_shape = MORPH_RECT;
-	int morphSize = 5;
-	Mat element = getStructuringElement(element_shape, Size(2*morphSize+1, 2*morphSize+1), Point(morphSize, morphSize) );
-
-  /// Detect edges using Threshold
-  threshold( src_gray, threshold_output, thresh, 255, THRESH_BINARY );
-  threshold(transductor, threshold_output_transductor, thresh, 255, THRESH_BINARY_INV);
-  
-  obtainRegionInMat(threshold_output_transductor, 90,threshold_output_transductor.cols, Scalar(0,0,0));
-  
-	morphologyEx(threshold_output_transductor, threshold_output_transductor, CV_MOP_CLOSE, element);
-	morphologyEx(threshold_output_transductor, threshold_output_transductor, CV_MOP_CLOSE, element);
-	
-	threshold_output_transductor = removeSmallBlobs(threshold_output_transductor, transductor_thresh);
-	
-	imshow("Transductor", threshold_output_transductor);
-
-//	imshow("Threshold", threshold_output);
-		
-	matrixData rectData = maxRectInMat(threshold_output);
-	
-	Mat tissue = threshold_output(Range::all(), Range(0,rectData.col - rectData.width));
-	resizeCol(tissue, threshold_output.cols - (rectData.col - rectData.width), Scalar(0,0,0));
-	
-  Mat gel = threshold_output - tissue;
-  Mat transductor_final = threshold_output + threshold_output_transductor;
-  
-  gel = removeSmallBlobs(gel, tissue_thresh);
-  imshow("Gel", gel);
-  
-  element_shape = MORPH_ELLIPSE;
-  morphSize = 2;
-	element = getStructuringElement(element_shape, Size(2*morphSize+1, 2*morphSize+1), Point(morphSize, morphSize) );
-	
-	morphologyEx(tissue, tissue, CV_MOP_OPEN, element);
-	morphologyEx(tissue, tissue, CV_MOP_OPEN, element);
-	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
-	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
-	morphologyEx(tissue, tissue, CV_MOP_CLOSE, element);
-	
-	tissue = removeSmallBlobs(tissue, tissue_thresh);
-	imshow("Tissue", tissue);
-	
-	Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
-	
-	Mat drawing(src_gray); // = Mat::zeros( threshold_output.size(), CV_8UC3 );
-	cvtColor( drawing, drawing, CV_GRAY2BGR );
-
-	line( drawing, Point(rectData.col, rectData.row), Point(rectData.col -  rectData.width, rectData.row), color, 1, 8 );
-	line( drawing, Point(rectData.col -  rectData.width, rectData.row), Point(rectData.col -  rectData.width, rectData.row - rectData.height), color, 1, 8 );
-	line( drawing, Point(rectData.col -  rectData.width, rectData.row - rectData.height), Point(rectData.col, rectData.row - rectData.height), color, 1, 8 );
-	line( drawing, Point(rectData.col, rectData.row - rectData.height), Point(rectData.col, rectData.row), color, 1, 8 );
-				
-	namedWindow( "Contours", CV_WINDOW_AUTOSIZE );
-  imshow( "Contours", drawing );
+	processImage(src, "", "", mode_g);
 }

@@ -44,6 +44,22 @@ void createNames(vector<string> & input)
 		input.push_back(to_string(i)+".png");
 }
 
+void obtainRegionInMat(Mat& m, int beginCol, int endCol, int beginRow, int endRow, const Scalar s)
+{
+	Mat mask = cvCreateMat(m.rows, m.cols, m.type());
+	mask.setTo(Scalar(0,0,0));
+	
+	for(int i=beginCol; i<endCol; i++)
+		 for(int j=beginRow; j<endRow; j++)
+		     mask.at<uchar>(Point(i,j)) = 255;
+	
+	Mat temporaryImg(m.rows, m.cols, m.type()); 
+	temporaryImg.setTo(s);
+	m.copyTo(temporaryImg,mask);
+
+	m = temporaryImg;
+}
+
 void obtainRegionInMat(Mat& m, int beginCol, int endCol, const Scalar s)
 {
 	Mat mask = cvCreateMat(m.rows, m.cols, m.type());
@@ -319,16 +335,16 @@ matrixData maxRectInMat(Mat& Image)
     int nRows = Image.rows;
     int nCols = Image.cols * channels;
 
-		unsigned char *image_data, *image_data_trasposed;
-		image_data_trasposed = new unsigned char[nRows*nCols];
-		
-		image_data = Image.ptr();
-		
-		if(Image.isContinuous())
-		{
-			trasposeMatrix(image_data, image_data_trasposed, nRows, nCols);
-			return find_max_matrix(image_data, image_data_trasposed, nRows, nCols);
-		}
-		return matrixData();
+	unsigned char *image_data, *image_data_trasposed;
+	image_data_trasposed = new unsigned char[nRows*nCols];
+	
+	image_data = Image.ptr();
+	
+	if(Image.isContinuous())
+	{
+		trasposeMatrix(image_data, image_data_trasposed, nRows, nCols);
+		return find_max_matrix(image_data, image_data_trasposed, nRows, nCols);
+	}
+	return matrixData();
 }
 #endif

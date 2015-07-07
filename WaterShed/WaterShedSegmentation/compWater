@@ -1,0 +1,1 @@
+g++ -o bin/watershed watershed.cpp -I/usr/local/include/opencv/ -I/usr/local/include/opencv2 -I../../common -lopencv_core -lopencv_highgui -lopencv_imgproc -lopencv_gpu -lopencv_photo -std=c++11
