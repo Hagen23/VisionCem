@@ -1,3 +1,10 @@
+/**
+*	Author:	Octavio Navarro Hinojosa
+*	Date:	June 2015
+*	
+*	Utility functions for the watershed segmentation.
+*/
+
 #ifndef UTILITY
 #define UTILITY
 
@@ -12,6 +19,9 @@
 using namespace cv;
 using namespace std;
 
+/**
+* A class that stores the rectangle data.
+*/
 struct matrixData
 {
 	int area, row, col, width, height;
@@ -38,12 +48,25 @@ struct matrixData
 	}
 };
 
+/**
+* Creates and stores filenames based on the information of the images' filenames.
+* @param input The vector that stores the created filenames.
+*/
 void createNames(vector<string> & input)
 {
 	for(int i = 1; i<= 48; i++)
 		input.push_back(to_string(i)+".png");
 }
 
+/**
+* Segments a region of an image.
+* @param m The image to be segmented. The final regmentation is also stored here.
+* @param beginCol The column index from which to start segmentation.
+* @param beginRow The row index from which to start segmentation.
+* @param endCol The column index that ends the segmentation.
+* @param endRow The row index that ends the segmentation.
+* @param s The color to fill the rest of the image with.
+*/
 void obtainRegionInMat(Mat& m, int beginCol, int endCol, int beginRow, int endRow, const Scalar s)
 {
 	Mat mask = cvCreateMat(m.rows, m.cols, m.type());
@@ -60,6 +83,13 @@ void obtainRegionInMat(Mat& m, int beginCol, int endCol, int beginRow, int endRo
 	m = temporaryImg;
 }
 
+/**
+* Segments a region of an image based just on column indexes.
+* @param m The image to be segmented. The final regmentation is also stored here.
+* @param beginCol The column index from which to start segmentation.
+* @param endCol The column index that ends the segmentation.
+* @param s The color to fill the rest of the image with.
+*/
 void obtainRegionInMat(Mat& m, int beginCol, int endCol, const Scalar s)
 {
 	Mat mask = cvCreateMat(m.rows, m.cols, m.type());
@@ -76,6 +106,12 @@ void obtainRegionInMat(Mat& m, int beginCol, int endCol, const Scalar s)
 	m = temporaryImg;
 }
 
+/**
+* Adds additional columns to an image. 
+* @param m The image to be added columns.
+* @param sz How many columns to add.
+* @param s The color to fill the added columns of the image with.
+*/
 void resizeCol(Mat& m, size_t sz, const Scalar& s)
 {
     Mat tm(m.rows, m.cols + sz, m.type());
@@ -83,7 +119,11 @@ void resizeCol(Mat& m, size_t sz, const Scalar& s)
     m.copyTo(tm(Rect(Point(0, 0), m.size())));
     m = tm;
 }
-
+/**
+* Prints how much time had passed since a determined moment.
+* @param Atime The time from which to determine how long it passed. 
+* @param msg A message to print.
+*/
 void ProccTimePrint( unsigned long Atime , string msg)
 {
  unsigned long Btime=0;
@@ -94,6 +134,10 @@ void ProccTimePrint( unsigned long Atime , string msg)
  printf("%s %.4lf(sec) / %.4lf(fps) \n", msg.c_str(),  sec, fps );
 }
 
+/** 
+* Processess a cvs file and saves the contents on a vector.
+* @param filename The filename of the cvs file to process.
+*/
 vector<vector<string>> getCsvContent(string filename)
 {
 	ifstream file ( filename ,  ios::in);
@@ -119,6 +163,13 @@ vector<vector<string>> getCsvContent(string filename)
 	return cvsContents;
 }
 
+/** 
+* Removes blobs in an image.
+* @param m the image from which to remove blobs.
+* @param maxBlobArea Blobs that have this area, o less, are filled. 
+* @param s Color to fill the blobs with.
+* @return drawing A Mat with the blobs removed.
+*/
 Mat removeSmallBlobs(Mat m, float maxBlobArea, Scalar s = Scalar(255, 255, 255))
 {
 	Mat drawing;
@@ -151,6 +202,204 @@ Mat removeSmallBlobs(Mat m, float maxBlobArea, Scalar s = Scalar(255, 255, 255))
 	return drawing;
 }
 
+/**
+* Finds the data of largest area of an histogram of an image.
+* I modified the original code found here: http://tech-queries.blogspot.mx/2011/09/find-largest-sub-matrix-with-all-1s-not.html
+* @param arr The input image data. Flat bidimentional array.
+* @param index The row index. Calculate maximum area in S for each row.
+* @param colSize The matrix column size.
+* @result outputData MatrixData with the location of the largest area histogram.
+*/
+matrixData largestArea(unsigned char *arr, int index, int colSize)
+{
+	int *area = new int[colSize]; 
+	int  i, t, maxWidth, maxHeight;
+	matrixData outputData;
+	stack<int> St;  
+
+	for (i=0; i<colSize; i++)
+	{
+		while (!St.empty())
+		{
+			if(arr[index+i] <= arr[index+St.top()])
+				St.pop();
+			else
+				break;
+		}
+		if(St.empty())
+			t = -1;
+		else
+			t = St.top();
+		area[i] = i - t - 1;
+		St.push(i);
+	}
+
+	while (!St.empty())
+	St.pop();
+
+	for (i=colSize-1; i>=0; i--)
+	{
+		while (!St.empty())
+		{
+			if(arr[index+i] <= arr[index + St.top()])
+				St.pop();
+			else
+				break;
+		}
+		if(St.empty())
+			t = colSize;
+		else
+			t = St.top();
+			
+		//calculating Ri, after this step area[i] = Li + Ri
+		area[i] += t - i -1;
+		St.push(i);
+	}
+
+	int max = 0;
+	//Calculating Area[i] and find max Area
+	for (i=0; i<colSize; i++)
+	{
+		int width = area[i] +1, height = arr[index+i];
+		area[i] = arr[index+i] * (area[i] + 1);
+		if (area[i] > max)
+		{
+			outputData.area = max = area[i];
+			//outputData.col = maxCol = i;
+			outputData.width = maxWidth = width;
+			outputData.height = maxHeight = height;
+		}
+	}
+
+//	outputData.printData();
+	return outputData;
+}
+
+/**
+* Trasposes a matrix of chars.
+* @param A the initial matrix.
+* @param result The trasposed matrix.
+* @param rowSize The matrix row size.
+* @param colSize The matrix columns size.
+*/
+void trasposeMatrix(unsigned char *A, unsigned char *result, int rowSize, int colSize)
+{
+	for(int i = 0; i < rowSize; i++)
+	{
+		for(int j = 0; j < colSize; j++)
+		{
+			result[j*rowSize+i] = A[i*rowSize + j];
+		}
+	}
+}
+
+/**
+* Looks for the largest rectangle in an image based on the histogram of  said image.
+* I modified the original code found here: http://tech-queries.blogspot.mx/2011/09/find-largest-sub-matrix-with-all-1s-not.html . I consider a trasposed matrix in order to obtain the rectangle's row and column point.
+* @param input The image data. This is used to obtain the histogram of columns.
+* @param input_trasposed The trasposed image data. This is needed to obtain the histogram of the rows. 
+* @param rowSize The image row size.
+* @param colSize The image column size.
+* @return A matrixData object with the information of the largest rectangle.
+*/
+matrixData find_max_matrix(unsigned char *input, unsigned char *input_trasposed, int rowSize, int colSize)
+{
+ matrixData finalData, dataRow, dataCol;
+ int maxRow, maxCol, cur_maxRow, cur_maxCol;
+ cur_maxRow = 0, cur_maxCol = 0;
+ unsigned char *A, *B;
+
+ A = new unsigned char[rowSize * colSize];
+ B = new unsigned char[rowSize * colSize];
+
+ memcpy ( A, input, rowSize*colSize );
+ memcpy ( B, input_trasposed, rowSize*colSize );
+ 
+ //Calculate Auxilary matrix histograms
+ for (int i=1; i<rowSize; i++)
+     for(int j=0; j<colSize; j++)
+     {
+         if(A[i*rowSize+j] == (unsigned char)255)
+             A[i*rowSize+j] = A[(i-1)*rowSize+j] + 1;
+         if(B[i*rowSize+j] == (unsigned char)255)
+             B[i*rowSize+j] = B[(i-1)*rowSize+j] + 1;
+     }
+
+ //Calculate maximum area in S for each row
+ for (int i=0; i<rowSize; i++)
+ {
+     dataRow = largestArea(A, i*rowSize, colSize);
+     dataCol = largestArea(B, i*rowSize, colSize);
+     maxRow = dataRow.area;
+     maxCol = dataCol.area;
+
+     if (maxRow > cur_maxRow)
+     {
+         cur_maxRow = maxRow;
+         finalData.copyFrom(dataRow);
+         finalData.row = i;
+     }
+
+     if (maxCol >= cur_maxCol)
+     {
+         cur_maxCol = maxCol;
+         finalData.col = i;
+     }
+ }
+ return finalData;
+}
+
+/**
+* Obtains the largest area rectangle in a binary image.
+* @param Image The binary image to process.
+* @return The rectangle information in a matrixData object. 
+*/
+matrixData maxRectInMat(Mat& Image)
+{
+    int channels = Image.channels();
+
+    int nRows = Image.rows;
+    int nCols = Image.cols * channels;
+
+	unsigned char *image_data, *image_data_trasposed;
+	image_data_trasposed = new unsigned char[nRows*nCols];
+
+	image_data = Image.ptr();
+
+	if(Image.isContinuous())
+	{
+		trasposeMatrix(image_data, image_data_trasposed, nRows, nCols);
+		return find_max_matrix(image_data, image_data_trasposed, nRows, nCols);
+	}
+	return matrixData();
+}
+
+/**
+* Fills the holes in an image.
+* @param _src The image to be processed.
+* @return dst The image with its holes filled.
+*/
+Mat FillHoles(Mat _src)
+{
+    CV_Assert(_src.type()==CV_8UC1);
+    Mat dst;
+    vector<vector<cv::Point>> contours;
+    vector<Vec4i> hierarchy;
+
+    findContours(_src,contours,hierarchy,CV_RETR_CCOMP,CV_CHAIN_APPROX_SIMPLE,cv::Point(0,0));
+    CvScalar color=cvScalar(255);
+    dst=Mat::zeros(_src.size(),CV_8UC1);
+
+    for(int i=0;i<contours.size();i++)
+    {
+        drawContours(dst,contours,i,color,-1,8,hierarchy,0,cv::Point());
+    }
+    return dst;
+}
+
+/**
+* Deprecated
+*/
 void removeAllSmallerBlobs(Mat& m, float minArea)
 {
 	float maxBlobArea = 0.0, secondMaxArea = 0.0;
@@ -200,168 +449,5 @@ void removeAllSmallerBlobs(Mat& m, float minArea)
 		Scalar color = Scalar( 255,255,255 );
 		drawContours( m, contours_poly, i, color, CV_FILLED, 8 );
 	}
-}
-
-matrixData largestArea(unsigned char *arr, int index, int colSize)
-{
-	int *area = new int[colSize]; //initialize it to 0
-	int  i, t, maxWidth, maxHeight;
-	matrixData outputData;
-	stack<int> St;  //include stack for using this #include<stack>
-
-	for (i=0; i<colSize; i++)
-	{
-		while (!St.empty())
-		{
-			if(arr[index+i] <= arr[index+St.top()])
-				St.pop();
-			else
-				break;
-		}
-		if(St.empty())
-			t = -1;
-		else
-			t = St.top();
-		//Calculating Li
-		area[i] = i - t - 1;
-		St.push(i);
-	}
-
-	//clearing stack for finding Ri
-	while (!St.empty())
-	St.pop();
-
-	for (i=colSize-1; i>=0; i--)
-	{
-		while (!St.empty())
-		{
-			if(arr[index+i] <= arr[index + St.top()])
-				St.pop();
-			else
-				break;
-		}
-		if(St.empty())
-			t = colSize;
-		else
-			t = St.top();
-		//calculating Ri, after this step area[i] = Li + Ri
-		area[i] += t - i -1;
-		St.push(i);
-	}
-
-	int max = 0;
-	//Calculating Area[i] and find max Area
-	for (i=0; i<colSize; i++)
-	{
-		int width = area[i] +1, height = arr[index+i];
-		area[i] = arr[index+i] * (area[i] + 1);
-		if (area[i] > max)
-		{
-			outputData.area = max = area[i];
-			//outputData.col = maxCol = i;
-			outputData.width = maxWidth = width;
-			outputData.height = maxHeight = height;
-		}
-	}
-
-//	outputData.printData();
-	return outputData;
-}
-
-void trasposeMatrix(unsigned char *A, unsigned char *result, int rowSize, int colSize)
-{
-	for(int i = 0; i < rowSize; i++)
-	{
-		for(int j = 0; j < colSize; j++)
-		{
-			result[j*rowSize+i] = A[i*rowSize + j];
-		}
-	}
-}
-
-matrixData find_max_matrix(unsigned char *input, unsigned char *input_trasposed, int rowSize, int colSize)
-{
- matrixData finalData, dataRow, dataCol;
- int maxRow, maxCol, cur_maxRow, cur_maxCol;
- cur_maxRow = 0, cur_maxCol = 0;
- unsigned char *A, *B;
-
- A = new unsigned char[rowSize * colSize];
- B = new unsigned char[rowSize * colSize];
-
- memcpy ( A, input, rowSize*colSize );
- memcpy ( B, input_trasposed, rowSize*colSize );
- //Calculate Auxilary matrix histograms
- for (int i=1; i<rowSize; i++)
-     for(int j=0; j<colSize; j++)
-     {
-         if(A[i*rowSize+j] == (unsigned char)255)
-             A[i*rowSize+j] = A[(i-1)*rowSize+j] + 1;
-         if(B[i*rowSize+j] == (unsigned char)255)
-             B[i*rowSize+j] = B[(i-1)*rowSize+j] + 1;
-     }
-
- //Calculate maximum area in S for each row
- for (int i=0; i<rowSize; i++)
- {
-     dataRow = largestArea(A, i*rowSize, colSize);
-     dataCol = largestArea(B, i*rowSize, colSize);
-     maxRow = dataRow.area;
-     maxCol = dataCol.area;
-
-     if (maxRow > cur_maxRow)
-     {
-         cur_maxRow = maxRow;
-         finalData.copyFrom(dataRow);
-         finalData.row = i;
-     }
-
-     if (maxCol >= cur_maxCol)
-     {
-         cur_maxCol = maxCol;
-         finalData.col = i;
-     }
- }
-
- //finalData.printData();
- return finalData;
-}
-
-matrixData maxRectInMat(Mat& Image)
-{
-    int channels = Image.channels();
-
-    int nRows = Image.rows;
-    int nCols = Image.cols * channels;
-
-	unsigned char *image_data, *image_data_trasposed;
-	image_data_trasposed = new unsigned char[nRows*nCols];
-
-	image_data = Image.ptr();
-
-	if(Image.isContinuous())
-	{
-		trasposeMatrix(image_data, image_data_trasposed, nRows, nCols);
-		return find_max_matrix(image_data, image_data_trasposed, nRows, nCols);
-	}
-	return matrixData();
-}
-
-Mat FillHoles(Mat _src)
-{
-    CV_Assert(_src.type()==CV_8UC1);
-    Mat dst;
-    vector<vector<cv::Point>> contours;
-    vector<Vec4i> hierarchy;
-
-    findContours(_src,contours,hierarchy,CV_RETR_CCOMP,CV_CHAIN_APPROX_SIMPLE,cv::Point(0,0));
-    CvScalar color=cvScalar(255);
-    dst=Mat::zeros(_src.size(),CV_8UC1);
-
-    for(int i=0;i<contours.size();i++)
-    {
-        drawContours(dst,contours,i,color,-1,8,hierarchy,0,cv::Point());
-    }
-    return dst;
 }
 #endif
