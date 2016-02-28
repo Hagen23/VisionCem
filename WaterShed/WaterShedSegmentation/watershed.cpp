@@ -7,6 +7,7 @@
 
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <ThreadPool.h>
 
 #include <utilityFunctions.h>
 #include <cstdio>
@@ -16,9 +17,9 @@ using namespace cv;
 using namespace std;
 
 vector<string> 	fileNames;			/** Vector that contains the filenames to process */  
-Mat 				markerMask, 			/** Mat that stores the generated mask */			
-				img, img0,
-				imgGray;		
+//Mat 				markerMask, 			/** Mat that stores the generated mask */			
+//				img, img0,
+//				imgGray;		
 Point 			prevPt(-1, -1);
 int 				image_window = 35, 		/** Variable that controls the image selection trackbar */
 				thresh_window = 15;		/** Variable that controls the binary threshold selection trackbar */
@@ -37,7 +38,7 @@ void setUp(void);
 * @param filename The file to process. Only used if mode == 1 to save the output images. 
 * @param mode The mode to use. 1 to save the output results, 0 to show the results.
 */
-void watershed_callback(string directory, string filename, int mode);
+void watershed_callback(string directory, string filename, int mode, Mat img0, Mat img, Mat imgGray, Mat markerMask);
 
 /**
 * Loads a single image to be processed. The image selection is done through the image trackbar.
@@ -50,7 +51,7 @@ void image_callback(int, void*);
 /**
 * Separes the different regions of an image and generates the mask to be used in the watershed algorithm.
 */
-void region_separation(void);
+void region_separation(Mat &markerMask, Mat imgGray);
 
 /**
 * This method is used only if mode == 0. It sets up the window and trackbars, and processess a single image. 
@@ -68,9 +69,9 @@ void allImages(void);
 * @param filename The file to process. Only used if mode == 1 to save the output images. 
 * @param mode The mode to use. 1 to save the output results, 0 to show the results.
 */
-void processImage(string directory, string filename, int mode);
+void processImage(string directory, string filename, int mode, Mat originalImage, Mat &processedImage);
 
-void watershed_callback(string directory, string filename, int mode)
+void watershed_callback(string directory, string filename, int mode, Mat img0, Mat img, Mat imgGray, Mat markerMask)
 {
 	cvtColor(imgGray, imgGray, COLOR_GRAY2BGR);
 	int i, j, compCount = 0;
@@ -138,7 +139,7 @@ void watershed_callback(string directory, string filename, int mode)
     }
 }
 
-void region_separation(void)
+void region_separation(Mat &markerMask, Mat imgGray)
 {
 	Mat leftRegion, middleRegion, rightRegion, regionBin;
 	matrixData leftRect, middleRect, rightRect;
@@ -196,7 +197,7 @@ void image_callback(int, void*)
     
     // This line was added just to have a different path to the files. Can be deleted as needed. 
 //    src_file = "../../../data/TestData/"+fileNames.at(image_window);
-	img0 = imread(src_file, 1);
+	Mat img0 = imread(src_file, 1), img;
 
 	if( img0.empty() )
 	{
@@ -204,7 +205,7 @@ void image_callback(int, void*)
 		return;
 	}
 
-	processImage("", "", mode);
+	processImage("", "", mode, img0, img);
 
     if(mode == 0)
     {
@@ -212,9 +213,10 @@ void image_callback(int, void*)
     }
 }
 
-void processImage(string directory, string filename, int mode)
+void processImage(string directory, string filename, int mode, Mat img0, Mat &img)
 {
-    img0.copyTo(img);
+	Mat imgGray, markerMask;
+	img0.copyTo(img);
 	blur(img, img, Size(3,3));
 
 	cvtColor(img, imgGray, COLOR_BGR2GRAY);
@@ -222,9 +224,9 @@ void processImage(string directory, string filename, int mode)
 
 	markerMask = Scalar::all(0);
 
-	region_separation();
+	region_separation(markerMask,imgGray);
 
-	watershed_callback(directory, filename, mode);
+	watershed_callback(directory, filename, mode, img0, img, imgGray, markerMask);
 }
 
 void setUp(void)
@@ -237,6 +239,7 @@ void setUp(void)
 
 void allImages(void)
 {
+	ThreadPool pool(8);
 	createNames(fileNames);
 
 	AAtimeCpu = getTickCount();
@@ -245,21 +248,26 @@ void allImages(void)
 
 	vector<vector<string>> cvsContents = getCsvContent("../../data/allData/surveyFilesToProcess.csv");
 //	vector<vector<string>> cvsContents = getCsvContent("../../../data/allData/surveyFilesToProcess.csv");
-	vector<string> filenames;
+//	vector<string> filenames;
 
 	for(int i = 0; i < cvsContents.size(); i++)
 	{
-		filenames.clear();
-		string directory = cvsContents[i][0];
-
-		for(int j = 1; j< cvsContents[i].size(); j++)
+		pool.Enqueue([=]()
 		{
-			img0 = imread("../../data/allData/originals/"+directory+"/"+cvsContents[i][j]+".png");
-//			img0 = imread("../../../data/allData/originals/"+directory+"/"+cvsContents[i][j]+".png");
-			processImage(directory, cvsContents[i][j], mode);
+			string directory = cvsContents[i][0];
+
+			for(int j = 1; j< cvsContents[i].size(); j++)
+			{
+				Mat img0 = imread("../../data/allData/originals/"+directory+"/"+cvsContents[i][j]+".png");
+				Mat img;
+	//			img0 = imread("../../../data/allData/originals/"+directory+"/"+cvsContents[i][j]+".png");
+				processImage(directory, cvsContents[i][j], mode, img0, img);
+			}
 		}
+		);
 	}
 
+	pool.ShutDown();
 	cout << "FINISHED" << endl;
 	ProccTimePrint(AAtimeCpu , "cpu");
 
