@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros">
+    <OPENCV_INCLUDE>C:\Libs\opencv_2.4.1\build\include\</OPENCV_INCLUDE>
+    <OPENCV_BIN>C:\Libs\opencv_2.4.1\build\x86\vc12\bin\</OPENCV_BIN>
+    <OPENCV_LIB>C:\Libs\opencv_2.4.1\build\x86\vc12\lib\</OPENCV_LIB>
+    <COMMON_DIR>C:\Hagen\Research\Proyectos\AccousticModellingCEM\Codigo\Vision_Cem\\common</COMMON_DIR>
+  </PropertyGroup>
+  <PropertyGroup />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(OPENCV_INCLUDE);$(COMMON_DIR);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OPENCV_LIB)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <BuildMacro Include="OPENCV_INCLUDE">
+      <Value>$(OPENCV_INCLUDE)</Value>
+    </BuildMacro>
+    <BuildMacro Include="OPENCV_BIN">
+      <Value>$(OPENCV_BIN)</Value>
+    </BuildMacro>
+    <BuildMacro Include="OPENCV_LIB">
+      <Value>$(OPENCV_LIB)</Value>
+    </BuildMacro>
+    <BuildMacro Include="COMMON_DIR">
+      <Value>$(COMMON_DIR)</Value>
+    </BuildMacro>
+  </ItemGroup>
+</Project>
