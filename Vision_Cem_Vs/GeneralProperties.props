@@ -5,7 +5,9 @@
     <OPENCV_INCLUDE>C:\Libs\opencv_2.4.1\build\include\</OPENCV_INCLUDE>
     <OPENCV_BIN>C:\Libs\opencv_2.4.1\build\x86\vc12\bin\</OPENCV_BIN>
     <OPENCV_LIB>C:\Libs\opencv_2.4.1\build\x86\vc12\lib\</OPENCV_LIB>
-    <COMMON_DIR>C:\Hagen\Research\Proyectos\AccousticModellingCEM\Codigo\Vision_Cem\\common</COMMON_DIR>
+    <COMMON_DIR>C:\Hagen\Research\Proyectos\AccousticModellingCEM\Codigo\VisionCem\Vision_Cem_Vs\\common</COMMON_DIR>
+    <MATLAB_INCLUDE>C:\Program Files\MATLAB\R2012a\extern\include</MATLAB_INCLUDE>
+    <MATLAB_LIB>C:\Program Files\MATLAB\R2012a\extern\lib\win64\microsoft</MATLAB_LIB>
   </PropertyGroup>
   <PropertyGroup />
   <ItemDefinitionGroup>
@@ -29,6 +31,12 @@
     </BuildMacro>
     <BuildMacro Include="COMMON_DIR">
       <Value>$(COMMON_DIR)</Value>
+    </BuildMacro>
+    <BuildMacro Include="MATLAB_INCLUDE">
+      <Value>$(MATLAB_INCLUDE)</Value>
+    </BuildMacro>
+    <BuildMacro Include="MATLAB_LIB">
+      <Value>$(MATLAB_LIB)</Value>
     </BuildMacro>
   </ItemGroup>
 </Project>

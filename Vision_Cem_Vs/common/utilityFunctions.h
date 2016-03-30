@@ -11,6 +11,7 @@
 #pragma once
 
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 #include <stack>
 #include <iostream>
 #include <vector>
@@ -450,5 +451,27 @@ void removeAllSmallerBlobs(Mat& m, float minArea)
 		Scalar color = Scalar( 255,255,255 );
 		drawContours( m, contours_poly, i, color, CV_FILLED, 8 );
 	}
+}
+
+/**
+* Converts an image data array to a matlab mat file
+* @param filename The filename where the mat file will be stored
+* @param data The data array to be transformed. Templated to allow different data types
+* @param width The width of the data array
+* @param height The height of the data array
+*/
+template <class T>
+void toMatlabMat(string filename, T *data, int width, int height)
+{
+	ofstream file(filename + ".txt", ofstream::out | ofstream::trunc);
+	for (int i = 0; i < height; i++)
+	{
+		for (int j = 0; j < width; j++)
+			file << data[j*height + i] << " ";
+		
+		file << "\n";
+	}
+	file << flush;
+	file.close();
 }
 #endif
