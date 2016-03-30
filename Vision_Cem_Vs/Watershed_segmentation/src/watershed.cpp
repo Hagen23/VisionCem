@@ -198,7 +198,7 @@ void obtainTransductor(Mat src, Mat &dst, Mat imgGray)
 
 	erode(water_marker, water_marker, element);
 
-	//dst += water_marker;
+	dst += water_marker;
 
 	//FillHoles(dst);
 	if (mode == 0)
@@ -299,7 +299,7 @@ void watershed_callback(string directory, string filename, int mode, Mat img0, M
 		for (int i = 0; i < floatMarkers.rows; ++i)
 			floatM.insert(floatM.end(), (float*)floatMarkers.ptr<uchar>(i), (float*)floatMarkers.ptr<uchar>(i)+floatMarkers.cols);
 
-		toMatlabMat<float>("../../data/allData/processedWatershed/Matlab_Mats/" + directory + "-" + filename , floatM.data(), 240, 240);
+		//toMatlabMat<float>("../../data/allData/processedWatershed/Matlab_Mats/" + directory + "-" + filename , floatM.data(), 240, 240);
 
     	imwrite("../../data/allData/processedWatershed/"+directory + "-" +filename+"_1_original.png", imgGray);
 		imwrite("../../data/allData/processedWatershed/"+directory + "-" +filename+"_2_regions.png", wshed);
@@ -370,7 +370,7 @@ void region_separation(Mat &markerMask, Mat imgGray)
 	// These  points were added to mask the background of the image. 
     rectangle(markerMask, Point(10, 10), Point(11,11), Scalar::all(1), 1); 	// The upper left corner, to obtain the left background
 	//rectangle(markerMask, Point(90, 125), Point(90, 125), Scalar::all(2), 1); 	// The middle of the image, to obtain the right background
-	rectangle(markerMask, Point(90, 3), Point(237, 237), Scalar::all(2), 1);	// A rectangle surrounding the right background, to eliminate 																	additional noise
+	//rectangle(markerMask, Point(90, 3), Point(237, 237), Scalar::all(2), 1);	// A rectangle surrounding the right background, to eliminate 																	additional noise
 
 	if (mode == 0)
 	{
