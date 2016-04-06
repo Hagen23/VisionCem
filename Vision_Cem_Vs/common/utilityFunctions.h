@@ -167,14 +167,12 @@ vector<vector<string>> getCsvContent(string filename)
 /** 
 * Removes blobs in an image.
 * @param m the image from which to remove blobs.
-* @param maxBlobArea Blobs that have this area, o less, are filled. 
+* @param maxBlobArea Blobs that have this area, or more, are filled. 
 * @param s Color to fill the blobs with.
 * @return drawing A Mat with the blobs removed.
 */
-Mat removeSmallBlobs(Mat m, float maxBlobArea, Scalar s = Scalar(255, 255, 255))
+void removeSmallBlobs(Mat &m, float maxBlobArea, Scalar s = Scalar(255, 255, 255))
 {
-	Mat drawing;
-
 	vector<vector<Point> > contours, endContours;
 	vector<Vec4i> hierarchy;
 
@@ -182,25 +180,23 @@ Mat removeSmallBlobs(Mat m, float maxBlobArea, Scalar s = Scalar(255, 255, 255))
 
 	for( int i = 0; i < contours.size(); i++ )
 	{
-			double area = contourArea(contours[i]);
-			if(area > maxBlobArea)
-				endContours.push_back(contours[i]);
+		double area = contourArea(contours[i]);
+		if(area > maxBlobArea)
+			endContours.push_back(contours[i]);
 	}
 
-  vector<vector<Point> > contours_poly( endContours.size() );
+	vector<vector<Point> > contours_poly( endContours.size() );
 
-  for( int i = 0; i < endContours.size(); i++ )
+	for( int i = 0; i < endContours.size(); i++ )
 		approxPolyDP( Mat(endContours[i]), contours_poly[i], 0, true );
 
-  drawing = Mat::zeros( m.size(), m.type() );
+	m = Mat::zeros( m.size(), m.type() );
 
-  for( int i = 0; i< endContours.size(); i++ )
+	for( int i = 0; i< endContours.size(); i++ )
 	{
 		Scalar color = s;
-		drawContours( drawing, contours_poly, i, color, 1, 8 );
+		drawContours( m, contours_poly, i, color, 1, 8 );
 	}
-
-	return drawing;
 }
 
 /**

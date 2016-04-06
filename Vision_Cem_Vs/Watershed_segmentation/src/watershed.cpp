@@ -25,11 +25,12 @@ vector<string> 	fileNames;			/** Vector that contains the filenames to process *
 //				img, img0,
 //				imgGray;		
 Point 			prevPt(-1, -1);
-int 			image_window = 35, 		/** Variable that controls the image selection trackbar */
-				thresh_window = 15,		/** Variable that controls the binary threshold selection trackbar */
-				trans_window = 10,
-				blur_window = 3,
-				water_window = 15;
+int 			image_window = 36, 		/** Variable that controls the image selection trackbar */
+thresh_window = 13,		/** Variable that controls the binary threshold selection trackbar */
+trans_window = 10,
+blur_window = 3,
+water_window = 15;
+
 string          	src_file;				/** String that contains the source file location */
 int             	mode = 0;				/** Mode indicates whether to process one image, with mode value = 0, (provided as a 									paramanter), or all the test images, with mode value = 1 */
 unsigned long   	AAtime=0, AAtimeCpu = 0; /** Variables that allow the measuring of the execution time */
@@ -82,6 +83,90 @@ void processImage(string directory, string filename, int mode, Mat originalImage
 void obtainTransductor(Mat src, Mat &dst);
 
 void obtainTransductorHole(Mat src, Mat &dst);
+
+void obtainTissue(Mat src, Mat &dst);
+
+void obtainTissue(Mat src, matrixData middleRect, Mat &dst)
+{
+	Mat leftRegion, regionBin, air_marker;
+	int area_to_remove = 5;
+	air_marker = Mat::zeros(dst.size(), dst.type());
+
+	leftRegion = src(Range::all(), Range(0, middleRect.col - middleRect.width - 5));
+	resizeCol(leftRegion, src.cols - (middleRect.col - middleRect.width - 5), Scalar(0, 0, 0));
+
+	threshold(leftRegion, regionBin, thresh_window, 255, THRESH_BINARY);
+
+	blur_window = blur_window % 2 == 0 ? blur_window + 1 : blur_window;
+	medianBlur(regionBin, regionBin, blur_window);
+
+	vector<vector<Point>> contours, endContours;
+	vector<Vec4i> hierarchy;
+
+	// Checks to see if any contours are found in the mask. 
+	findContours(regionBin, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE);
+
+	double max_area = contourArea(contours[0]);
+	endContours.push_back(contours[0]);
+
+	for (int i = 1; i < contours.size(); i++)
+	{
+		double area = contourArea(contours[i]);
+		if (area > max_area)
+		{
+			endContours.pop_back();
+			endContours.push_back(contours[i]);
+			max_area = area;
+		}
+	}
+
+	vector<vector<Point> > contours_poly(endContours.size());
+
+	for (int i = 0; i < endContours.size(); i++)
+		approxPolyDP(Mat(endContours[i]), contours_poly[i], 0, true);
+
+	//for (idx = 0; idx >= 0; idx = hierarchy[idx][0])
+	for (int i = 0; i< endContours.size(); i++)
+	{
+		//drawContours(dst, contours, idx, color, 1, 8, hierarchy);
+		drawContours(dst, contours_poly, i, Scalar::all(4), 1, 8);
+		drawContours(air_marker, contours_poly, i, Scalar::all(255), -1, 8);
+	}
+
+	int conv_kernel[3][3] = { {1,1,1}, {1,0,1}, {1,1,1} };
+	Mat kernel = Mat(Size(3, 3), air_marker.type());
+
+	for (int i = 0; i < 3; i++)
+	for (int j = 0; j < 3; j++)
+		kernel.at<uchar>(i, j) = conv_kernel[i][j];
+
+	do
+	{
+		filter2D(air_marker, air_marker, -1, kernel, Point(-1, -1));
+		contours.clear();
+		findContours(air_marker, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE);
+	} while (contours.size() > 1);
+
+	threshold(air_marker, air_marker, 0, 1, THRESH_BINARY_INV);
+
+	obtainRegionInMat(air_marker, 0, middleRect.col - middleRect.width - area_to_remove,
+		area_to_remove, air_marker.rows - area_to_remove, Scalar::all(0));
+
+	int dilation_type = MORPH_ELLIPSE;
+	int dilation_size = 3;
+
+	Mat element = getStructuringElement(dilation_type,
+		Size(2 * dilation_size + 1, 2 * dilation_size + 1),
+		Point(dilation_size, dilation_size));
+
+	erode(air_marker, air_marker, element);
+	erode(air_marker, air_marker, element);
+
+	if (mode == 0)
+		imshow("air marker", air_marker * 255);
+
+	dst += air_marker;
+}
 
 void obtainTransductorHole(Mat src, Mat &dst)
 {
@@ -141,7 +226,7 @@ void obtainTransductor(Mat src, Mat &dst, Mat imgGray)
 	dst = Mat::zeros(dst.size(), dst.type());
 	water_marker = Mat::zeros(dst.size(), dst.type());
 
-		//srcGray(Range::all(), Range(75, srcGray.cols));
+	//srcGray(Range::all(), Range(75, srcGray.cols));
 
 	//for (int row = 0; row < temp.rows; row++)
 	//for (int col = 0; col < temp.cols; col++)
@@ -152,7 +237,7 @@ void obtainTransductor(Mat src, Mat &dst, Mat imgGray)
 	//}
 
 	threshold(src, src, trans_window, 255, THRESH_BINARY_INV);
-
+	
 	blur_window = blur_window % 2 == 0 ? blur_window + 1 : blur_window;
 	medianBlur(src, src, blur_window);
 
@@ -161,16 +246,16 @@ void obtainTransductor(Mat src, Mat &dst, Mat imgGray)
 	vector<Vec4i> hierarchy;
 	
 	// Checks to see if any contours are found in the mask. 
-	findContours(src, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE);
+	findContours(src, endContours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE);
 
-	for (int i = 0; i < contours.size(); i++)
-	{
-		double area = contours[i].size();
-			//contourArea(contours[i]);
-		//cout << area << endl;
-		if (area > 50)
-			endContours.push_back(contours[i]);
-	}
+	//for (int i = 0; i < contours.size(); i++)
+	//{
+	//	//double area = contours[i].size();
+	//		//contourArea(contours[i]);
+	//	//cout << area << endl;
+	//	//if (area > contour_area)
+	//		endContours.push_back(contours[i]);
+	//}
 	//cout << endl;
 
 	vector<vector<Point> > contours_poly(endContours.size());
@@ -187,6 +272,10 @@ void obtainTransductor(Mat src, Mat &dst, Mat imgGray)
 	}
 
 	threshold(water_marker, water_marker, 0, 2, THRESH_BINARY_INV);
+	
+	obtainRegionInMat(dst, 80 + area_to_remove, dst.cols - area_to_remove,
+		area_to_remove, dst.rows - area_to_remove, Scalar::all(0));
+
 	obtainRegionInMat(water_marker, 80 + area_to_remove, water_marker.cols -area_to_remove,
 		area_to_remove, water_marker.rows-area_to_remove, Scalar::all(0));
 
@@ -239,8 +328,10 @@ void watershed_callback(string directory, string filename, int mode, Mat img0, M
 
 	// Paint the watershed image.
 	//* colors for the regions: 1 - air, 2 - water, 3 - gel, 4 - tissue, 5 - transductor, 6 - transductor hole
-	for (i = 0; i < markerMask.rows; i++)
-	for (j = 0; j < markerMask.cols; j++)
+	try
+	{
+		for (i = 0; i < markerMask.rows; i++)
+		for (j = 0; j < markerMask.cols; j++)
 		{
 			int index = markerMask.at<int>(i, j);
 			if (index == -1)
@@ -253,8 +344,8 @@ void watershed_callback(string directory, string filename, int mode, Mat img0, M
 				floatMarkers.at<float>(i, j) = 0.0f;
 				wshed.at<Vec3b>(i, j) = Vec3b(0, 0, 0);
 			}
-			else 
-				wshed.at<Vec3b>(i,j) = colorTab[index - 1];
+			else
+				wshed.at<Vec3b>(i, j) = colorTab[index - 1];
 
 			if (index == 1)
 				floatMarkers.at<float>(i, j) = 0.0f;
@@ -269,6 +360,12 @@ void watershed_callback(string directory, string filename, int mode, Mat img0, M
 			if (index == 6)
 				floatMarkers.at<float>(i, j) = 1.0f;
 		}
+	}
+	catch (Exception e)
+	{
+		int test = 0;
+	}
+	
 
 	// Add transparency in order to see the original image and the watershed areas. 
 	wshed = wshed*0.5 + imgGray*0.5;
@@ -311,7 +408,7 @@ void watershed_callback(string directory, string filename, int mode, Mat img0, M
 
 void region_separation(Mat &markerMask, Mat imgGray)
 {
-	Mat leftRegion, middleRegion, rightRegion, regionBin, transductorMat, transductorHoleMat;
+	Mat leftRegion, middleRegion, rightRegion, regionBin, transductorMat, transductorHoleMat, tissueMat;
 	matrixData leftRect, middleRect, rightRect;
 	unsigned long time;
 
@@ -330,17 +427,23 @@ void region_separation(Mat &markerMask, Mat imgGray)
 	//ProccTimePrint(time, "Gel segmentation");
 
 	//time = getTickCount();
-	leftRegion = imgGray(Range::all(), Range(0,middleRect.col - middleRect.width));
-	resizeCol(leftRegion, imgGray.cols - (middleRect.col - middleRect.width), Scalar(0,0,0));
+	tissueMat = Mat::zeros(imgGray.size(), imgGray.type());
+	obtainTissue(imgGray, middleRect, tissueMat);
+	tissueMat.convertTo(tissueMat, CV_32S);
+	markerMask += tissueMat;
+	//removeSmallBlobs(regionBin, 400);
+	//regionBin = FillHoles(regionBin);
+	
+	//regionBin.convertTo(regionBin, CV_32S);
+	//markerMask += regionBin;
 
-	threshold( leftRegion, regionBin, thresh_window, 255, THRESH_BINARY );
-    regionBin = removeSmallBlobs(regionBin, 400);
-    regionBin = FillHoles(regionBin);
+	//imshow("tissue region", regionBin);
 
-	leftRect = maxRectInMat(regionBin);
+	//leftRect = maxRectInMat(regionBin);
 
-	if(leftRect.col < 90)
-        rectangle(markerMask, Point(leftRect.col-3, leftRect.row-3), Point(leftRect.col-leftRect.width+3,leftRect.row-leftRect.height+3), Scalar::all(4), 1);
+	////if(leftRect.col < 90)
+ //       rectangle(markerMask, Point(leftRect.col-3, leftRect.row-3), 
+		//Point(leftRect.col-leftRect.width+3,leftRect.row-leftRect.height+3), Scalar::all(4), 1);
 	//ProccTimePrint(time, "Tissue Segmentation");
 
 	//time = getTickCount();
@@ -368,7 +471,7 @@ void region_separation(Mat &markerMask, Mat imgGray)
 	markerMask += transductorMat;
 
 	// These  points were added to mask the background of the image. 
-    rectangle(markerMask, Point(10, 10), Point(11,11), Scalar::all(1), 1); 	// The upper left corner, to obtain the left background
+    //rectangle(markerMask, Point(10, 10), Point(11,11), Scalar::all(1), 1); 	// The upper left corner, to obtain the left background
 	//rectangle(markerMask, Point(90, 125), Point(90, 125), Scalar::all(2), 1); 	// The middle of the image, to obtain the right background
 	//rectangle(markerMask, Point(90, 3), Point(237, 237), Scalar::all(2), 1);	// A rectangle surrounding the right background, to eliminate 																	additional noise
 
