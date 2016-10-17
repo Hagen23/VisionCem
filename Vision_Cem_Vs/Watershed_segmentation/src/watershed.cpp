@@ -133,6 +133,8 @@ void obtainTissue(Mat src, matrixData middleRect, Mat &dst)
 		drawContours(air_marker, contours_poly, i, Scalar::all(255), -1, 8);
 	}
 
+	imshow("Tissue", dst * 255 *0.5f+ src*0.5f);
+
 	int conv_kernel[3][3] = { {1,1,1}, {1,0,1}, {1,1,1} };
 	Mat kernel = Mat(Size(3, 3), air_marker.type());
 
@@ -146,6 +148,10 @@ void obtainTissue(Mat src, matrixData middleRect, Mat &dst)
 		contours.clear();
 		findContours(air_marker, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE);
 	} while (contours.size() > 1);
+
+	Mat air_marker_1;
+	air_marker.convertTo(air_marker_1, CV_8UC3);
+	imshow("air_marker_1", air_marker_1 * 255 * 0.5 + src*0.5);
 
 	threshold(air_marker, air_marker, 0, 1, THRESH_BINARY_INV);
 
@@ -163,7 +169,7 @@ void obtainTissue(Mat src, matrixData middleRect, Mat &dst)
 	erode(air_marker, air_marker, element);
 
 	if (mode == 0)
-		imshow("air marker", air_marker * 255);
+		imshow("air marker", air_marker * 255  + src * 0.5);
 
 	dst += air_marker;
 }
@@ -271,7 +277,13 @@ void obtainTransductor(Mat src, Mat &dst, Mat imgGray)
 		drawContours(water_marker, contours_poly, i, Scalar::all(255), CV_FILLED, 8);
 	}
 
+	imshow("Transducer", dst*255*0.5f);
+
 	threshold(water_marker, water_marker, 0, 2, THRESH_BINARY_INV);
+
+	Mat water_marker_1;
+	water_marker.convertTo(water_marker_1, CV_8UC3);
+	imshow("water_marker_1", water_marker_1 * 255 * 0.5 + src*0.5);
 	
 	obtainRegionInMat(dst, 80 + area_to_remove, dst.cols - area_to_remove,
 		area_to_remove, dst.rows - area_to_remove, Scalar::all(0));
@@ -286,13 +298,14 @@ void obtainTransductor(Mat src, Mat &dst, Mat imgGray)
 		Point(erosion_size, erosion_size));
 
 	erode(water_marker, water_marker, element);
+	erode(water_marker, water_marker, element);
 
 	dst += water_marker;
 
 	//FillHoles(dst);
 	if (mode == 0)
 	{
-		imshow("Water", water_marker*255);
+		imshow("Water", water_marker * 255 * 0.5 + imgGray * 0.5);
 		imshow("Transducerº", dst * 255 * 0.5f + imgGray* 0.5f);
 	}
 	
@@ -426,6 +439,10 @@ void region_separation(Mat &markerMask, Mat imgGray)
 	rectangle(markerMask, Point(middleRect.col-10, middleRect.row-10), Point(middleRect.col-middleRect.width+10,middleRect.row-middleRect.height+10), Scalar::all(3), 1);
 	//ProccTimePrint(time, "Gel segmentation");
 
+	Mat gelpad_mat;
+	markerMask.convertTo(gelpad_mat, CV_8UC3);
+	imshow("gelpad", gelpad_mat * 255 * 0.5 + imgGray*0.5);
+
 	//time = getTickCount();
 	tissueMat = Mat::zeros(imgGray.size(), imgGray.type());
 	obtainTissue(imgGray, middleRect, tissueMat);
@@ -512,6 +529,9 @@ void processImage(string directory, string filename, int mode, Mat img0, Mat &im
 	Mat imgGray, markerMask;
 	img0.copyTo(img);
 	blur(img, img, Size(3,3));
+
+	imshow("Original", img0);
+	imshow("Blurred", img);
 	
 	cvtColor(img, imgGray, COLOR_BGR2GRAY);
 	//cvtColor(img, markerMask, COLOR_BGR2GRAY);
