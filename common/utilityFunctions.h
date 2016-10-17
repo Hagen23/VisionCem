@@ -11,6 +11,7 @@
 #pragma once
 
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 #include <stack>
 #include <iostream>
 #include <vector>
@@ -166,14 +167,12 @@ vector<vector<string>> getCsvContent(string filename)
 /** 
 * Removes blobs in an image.
 * @param m the image from which to remove blobs.
-* @param maxBlobArea Blobs that have this area, o less, are filled. 
+* @param maxBlobArea Blobs that have this area, or more, are filled. 
 * @param s Color to fill the blobs with.
 * @return drawing A Mat with the blobs removed.
 */
-Mat removeSmallBlobs(Mat m, float maxBlobArea, Scalar s = Scalar(255, 255, 255))
+void removeSmallBlobs(Mat &m, float maxBlobArea, Scalar s = Scalar(255, 255, 255))
 {
-	Mat drawing;
-
 	vector<vector<Point> > contours, endContours;
 	vector<Vec4i> hierarchy;
 
@@ -181,25 +180,23 @@ Mat removeSmallBlobs(Mat m, float maxBlobArea, Scalar s = Scalar(255, 255, 255))
 
 	for( int i = 0; i < contours.size(); i++ )
 	{
-			double area = contourArea(contours[i]);
-			if(area > maxBlobArea)
-				endContours.push_back(contours[i]);
+		double area = contourArea(contours[i]);
+		if(area > maxBlobArea)
+			endContours.push_back(contours[i]);
 	}
 
-  vector<vector<Point> > contours_poly( endContours.size() );
+	vector<vector<Point> > contours_poly( endContours.size() );
 
-  for( int i = 0; i < endContours.size(); i++ )
+	for( int i = 0; i < endContours.size(); i++ )
 		approxPolyDP( Mat(endContours[i]), contours_poly[i], 0, true );
 
-  drawing = Mat::zeros( m.size(), m.type() );
+	m = Mat::zeros( m.size(), m.type() );
 
-  for( int i = 0; i< endContours.size(); i++ )
+	for( int i = 0; i< endContours.size(); i++ )
 	{
 		Scalar color = s;
-		drawContours( drawing, contours_poly, i, color, CV_FILLED, 8 );
+		drawContours( m, contours_poly, i, color, 1, 8 );
 	}
-
-	return drawing;
 }
 
 /**
@@ -295,7 +292,8 @@ void trasposeMatrix(unsigned char *A, unsigned char *result, int rowSize, int co
 
 /**
 * Looks for the largest rectangle in an image based on the histogram of  said image.
-* I modified the original code found here: http://tech-queries.blogspot.mx/2011/09/find-largest-sub-matrix-with-all-1s-not.html . I consider a trasposed matrix in order to obtain the rectangle's row and column point.
+* I modified the original code found here: http://tech-queries.blogspot.mx/2011/09/find-largest-sub-matrix-with-all-1s-not.html . 
+* I consider a trasposed matrix in order to obtain the rectangle's row and column point.
 * @param input The image data. This is used to obtain the histogram of columns.
 * @param input_trasposed The trasposed image data. This is needed to obtain the histogram of the rows. 
 * @param rowSize The image row size.
@@ -379,7 +377,7 @@ matrixData maxRectInMat(Mat& Image)
 * @param _src The image to be processed.
 * @return dst The image with its holes filled.
 */
-Mat FillHoles(Mat _src)
+Mat FillHoles(Mat _src, Scalar color = Scalar(255))
 {
     CV_Assert(_src.type()==CV_8UC1);
     Mat dst;
@@ -387,7 +385,7 @@ Mat FillHoles(Mat _src)
     vector<Vec4i> hierarchy;
 
     findContours(_src,contours,hierarchy,CV_RETR_CCOMP,CV_CHAIN_APPROX_SIMPLE,cv::Point(0,0));
-    CvScalar color=cvScalar(255);
+    //Scalar color=Scalar(255);
     dst=Mat::zeros(_src.size(),CV_8UC1);
 
     for(int i=0;i<contours.size();i++)
@@ -449,5 +447,27 @@ void removeAllSmallerBlobs(Mat& m, float minArea)
 		Scalar color = Scalar( 255,255,255 );
 		drawContours( m, contours_poly, i, color, CV_FILLED, 8 );
 	}
+}
+
+/**
+* Converts an image data array to a matlab mat file
+* @param filename The filename where the mat file will be stored
+* @param data The data array to be transformed. Templated to allow different data types
+* @param width The width of the data array
+* @param height The height of the data array
+*/
+template <class T>
+void toMatlabMat(string filename, T *data, int width, int height)
+{
+	ofstream file(filename + ".txt", ofstream::out | ofstream::trunc);
+	for (int i = 0; i < height; i++)
+	{
+		for (int j = 0; j < width; j++)
+			file << data[j*height + i] << " ";
+		
+		file << "\n";
+	}
+	file << flush;
+	file.close();
 }
 #endif
