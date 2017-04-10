@@ -1,3 +1,3 @@
 # VisionCem
 
-Segmentation proyect
+Segmentation project
